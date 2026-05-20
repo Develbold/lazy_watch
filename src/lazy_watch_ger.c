@@ -130,7 +130,7 @@ static void do_init(void)
 static void do_deinit(void) {
   window_destroy(s_data.window);
   text_layer_destroy(s_data.label);
-  property_animation_destroy(fade_animation);
+  // SDK 3+: animations are auto-freed on completion; do not call property_animation_destroy
 }
 
 int main(void) {
