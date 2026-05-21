@@ -29,7 +29,7 @@ static void init_animation (void)
 {
   /*create the "from" frame*/
   GRect frame_from;
-  frame_from.origin.x=144;
+  frame_from.origin.x=frame.size.w;
   frame_from.origin.y=layer_correct_position;
   frame_from.size.h=frame.size.h;
   frame_from.size.w=frame.size.w;
@@ -71,7 +71,7 @@ static void align_vert ( void )
   //get the size of the text
   GSize current_size = text_layer_get_content_size (s_data.label);
   //calculate the new centered pos
-  layer_correct_position = (((168 - current_size.h)/2) - HEIGHT_CORRECTION);
+  layer_correct_position = (((frame.size.h - current_size.h)/2) - HEIGHT_CORRECTION);
   //layer_correct_position = new_pos;
   //set the new size
   reset_layer(0, layer_correct_position, frame.size.w, (frame.size.h /*- (new_pos)*/),true);
