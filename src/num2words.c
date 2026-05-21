@@ -160,7 +160,7 @@ static const char* STR_EIN = "ein";
 static const char* STR_SPACE = "\n";
 
 //this returns the correct pm/am hour,  instead of the %12 hour
-int get_cor_hour (uint8_t inc_hour)
+static int get_cor_hour(uint8_t inc_hour)
 {
   if (inc_hour < 12)
   {
@@ -248,19 +248,6 @@ static size_t append_string(char* buffer, const size_t length, const char* str) 
 
 void fuzzy_time_to_words(int fuzzy_hours, int fuzzy_minutes, char* words, size_t length)
 {
-  //int fuzzy_hours = hours;
-  //int fuzzy_minutes = ((minutes + 2) / 5) * 5;
-  //int fuzzy_minutes = minutes;
-
-  /*// Handle hour & minute roll-over.
-  if (fuzzy_minutes > 59) {
-    fuzzy_minutes = 0;
-    fuzzy_hours += 1;
-    if (fuzzy_hours > 23) {
-      fuzzy_hours = 0;
-    }
-  }*/
-
   size_t remaining = length;
   memset(words, 0, length);
 
