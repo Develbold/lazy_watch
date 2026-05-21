@@ -8,7 +8,7 @@
     "displayName": "Lazy Watch German",
     "uuid": "06b0ddaf-325b-40f3-97b1-434b4f950bf7",
     "sdkVersion": "3",
-    "targetPlatforms": ["aplite", "basalt", "diorite"],
+    "targetPlatforms": ["aplite", "basalt", "diorite", "emery"],
     "watchapp": {
       "watchface": true
     },
