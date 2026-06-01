@@ -17,7 +17,20 @@
         {
           "type": "font",
           "name": "CaviarDreamsBold_29",
-          "file": "fonts/CaviarDreamsBold_29.ttf"
+          "file": "fonts/CaviarDreamsBold_29.ttf",
+          "characterRegex": "[A-Za-züö]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsBold_38",
+          "file": "fonts/CaviarDreamsBold_29.ttf",
+          "characterRegex": "[A-Za-züö]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsBold_52",
+          "file": "fonts/CaviarDreamsBold_29.ttf",
+          "characterRegex": "[A-Za-züö]"
         }
       ]
     }
