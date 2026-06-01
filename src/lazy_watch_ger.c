@@ -25,6 +25,16 @@ static GFont s_font_medium;
 static GFont s_font_large;
 static Layer *root_layer;
 
+static bool word_fits_width(const char *text, GFont font) {
+  GSize narrow = graphics_text_layout_get_content_size(
+      text, font, GRect(0, 0, frame.size.w, 10000),
+      GTextOverflowModeWordWrap, GTextAlignmentLeft);
+  GSize wide = graphics_text_layout_get_content_size(
+      text, font, GRect(0, 0, 10000, 10000),
+      GTextOverflowModeWordWrap, GTextAlignmentLeft);
+  return narrow.h == wide.h;
+}
+
 static GFont choose_font(const char *text) {
   GRect measure_box = GRect(0, 0, frame.size.w, frame.size.h);
   int16_t max_h = frame.size.h - FONT_MARGIN;
@@ -32,11 +42,11 @@ static GFont choose_font(const char *text) {
 
   sz = graphics_text_layout_get_content_size(
       text, s_font_large, measure_box, GTextOverflowModeWordWrap, GTextAlignmentCenter);
-  if (sz.h <= max_h) return s_font_large;
+  if (sz.h <= max_h && word_fits_width(text, s_font_large)) return s_font_large;
 
   sz = graphics_text_layout_get_content_size(
       text, s_font_medium, measure_box, GTextOverflowModeWordWrap, GTextAlignmentCenter);
-  if (sz.h <= max_h) return s_font_medium;
+  if (sz.h <= max_h && word_fits_width(text, s_font_medium)) return s_font_medium;
 
   return s_font_small;
 }
