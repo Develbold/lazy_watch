@@ -140,11 +140,11 @@ static const char* STR_EIN = "EIN";
 static const char* STR_OH_CLOCK = "Uhr";
 static const char* STR_NOON = "Zwölf";
 static const char* STR_MIDNIGHT = "Null";
-static const char* STR_QUARTER = "viertel";
-static const char* STR_TO = "vor";
-static const char* STR_HALF = "halb";
-static const char* STR_AFTER = "nach";
-static const char* STR_AND = "und";
+static const char* STR_QUARTER = "Viertel";
+static const char* STR_TO = "Vor";
+static const char* STR_HALF = "Halb";
+static const char* STR_AFTER = "Nach";
+static const char* STR_AND = "Und";
 static const char* STR_EIN = "Ein";
 #else
 static const char* STR_OH_CLOCK = "uhr";
@@ -297,24 +297,6 @@ void fuzzy_time_to_words(int fuzzy_hours, int fuzzy_minutes, char* words, size_t
       fuzzy_hours = (fuzzy_hours + 1) % 24;
       remaining -= append_number(words, get_cor_hour(fuzzy_hours));
     }
-    // //31 to 39
-    // //print example: "elf uhr drei und dreissig"
-    // else if ((fuzzy_minutes > 30)&&(fuzzy_minutes < 50))
-    // {
-    //   //if the hour is one, print "ein" instead of "eins"
-    //   if ((fuzzy_hours == 1)||(fuzzy_hours == 13))
-    //   {
-    //     remaining -= append_string(words, remaining, STR_EIN);
-    //   }
-    //   else
-    //   {
-    //     remaining -= append_number(words, get_cor_hour(fuzzy_hours));
-    //   }
-    //   remaining -= append_string(words, remaining, STR_SPACE);
-    //   remaining -= append_string(words, remaining, STR_OH_CLOCK);
-    //   remaining -= append_string(words, remaining, STR_SPACE);
-    //   remaining -= append_number(words, fuzzy_minutes);
-	  // }
     else if (fuzzy_minutes >= 50)
     {
       remaining -= append_number(words, 60 - fuzzy_minutes);
@@ -326,7 +308,10 @@ void fuzzy_time_to_words(int fuzzy_hours, int fuzzy_minutes, char* words, size_t
     }
     else
     {
-      remaining -= append_number(words, get_cor_hour(fuzzy_hours));
+      int h = get_cor_hour(fuzzy_hours);
+      remaining -= (h == 1)
+          ? append_string(words, remaining, STR_EIN)
+          : append_number(words, h);
       remaining -= append_string(words, remaining, STR_SPACE);
       remaining -= append_string(words, remaining, STR_OH_CLOCK);
       remaining -= append_string(words, remaining, STR_SPACE);

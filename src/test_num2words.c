@@ -18,6 +18,14 @@ int main(void) {
         putchar('\n');
     }
 
+    printf("\n--- hour 1 ---\n");
+    for (int m = 0; m < 60; m++) {
+        fuzzy_time_to_words(1, m, buf, BUFFER_SIZE);
+        printf(" 1:%02d  ", m);
+        print_oneline(buf);
+        putchar('\n');
+    }
+
     printf("\n--- noon ---\n");
     fuzzy_time_to_words(12, 0, buf, BUFFER_SIZE);
     printf("12:00  ");
