@@ -25,39 +25,33 @@ static GFont s_font_medium;
 static GFont s_font_large;
 static Layer *root_layer;
 
-static bool word_fits_width(const char *text, GFont font) {
-  GSize narrow = graphics_text_layout_get_content_size(
-      text, font, GRect(0, 0, frame.size.w, 10000),
-      GTextOverflowModeWordWrap, GTextAlignmentLeft);
-  GSize wide = graphics_text_layout_get_content_size(
-      text, font, GRect(0, 0, 10000, 10000),
-      GTextOverflowModeWordWrap, GTextAlignmentLeft);
-  return narrow.h == wide.h;
-}
-
-static GFont choose_font(const char *text) {
-  GRect measure_box = GRect(0, 0, frame.size.w, frame.size.h);
+static GFont choose_font(const char *text, GSize *out_size) {
+  GRect narrow_box = GRect(0, 0, frame.size.w, 10000);
+  GRect wide_box   = GRect(0, 0, 10000, 10000);
   int16_t max_h = frame.size.h - FONT_MARGIN;
-  GSize sz;
 
-  sz = graphics_text_layout_get_content_size(
-      text, s_font_large, measure_box, GTextOverflowModeWordWrap, GTextAlignmentCenter);
-  if (sz.h <= max_h && word_fits_width(text, s_font_large)) return s_font_large;
-
-  sz = graphics_text_layout_get_content_size(
-      text, s_font_medium, measure_box, GTextOverflowModeWordWrap, GTextAlignmentCenter);
-  if (sz.h <= max_h && word_fits_width(text, s_font_medium)) return s_font_medium;
-
+  GFont candidates[2] = {s_font_large, s_font_medium};
+  for (int i = 0; i < 2; i++) {
+    GSize sz = graphics_text_layout_get_content_size(
+        text, candidates[i], narrow_box, GTextOverflowModeWordWrap, GTextAlignmentCenter);
+    if (sz.h > max_h) continue;
+    GSize wide = graphics_text_layout_get_content_size(
+        text, candidates[i], wide_box, GTextOverflowModeWordWrap, GTextAlignmentLeft);
+    if (sz.h != wide.h) continue;
+    *out_size = sz;
+    return candidates[i];
+  }
+  *out_size = graphics_text_layout_get_content_size(
+      text, s_font_small, narrow_box, GTextOverflowModeWordWrap, GTextAlignmentCenter);
   return s_font_small;
 }
 
 static void update_time(struct tm *t) {
   fuzzy_time_to_words(t->tm_hour, t->tm_min, s_data.buffer, BUFFER_SIZE);
 
-  text_layer_set_font(s_data.label, choose_font(s_data.buffer));
+  GSize content_size;
+  text_layer_set_font(s_data.label, choose_font(s_data.buffer, &content_size));
   text_layer_set_text(s_data.label, s_data.buffer);
-
-  GSize content_size = text_layer_get_content_size(s_data.label);
   int16_t y = (frame.size.h - content_size.h) / 2 - HEIGHT_CORRECTION;
 
   GRect frame_from = GRect(frame.size.w, y, frame.size.w, frame.size.h);

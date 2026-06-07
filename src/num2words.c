@@ -287,16 +287,6 @@ void fuzzy_time_to_words(int fuzzy_hours, int fuzzy_minutes, char* words, size_t
       fuzzy_hours = (fuzzy_hours + 1) % 24;
       remaining -= append_number(words, get_cor_hour(fuzzy_hours));
     }
-    //10 & 5 before
-    else if (fuzzy_minutes == 50 || fuzzy_minutes == 55)
-    {
-      remaining -= append_number(words, 60 - fuzzy_minutes);
-      remaining -= append_string(words, remaining, STR_SPACE);
-      remaining -= append_string(words, remaining, STR_TO);
-      remaining -= append_string(words, remaining, STR_SPACE);
-      fuzzy_hours = (fuzzy_hours + 1) % 24;
-      remaining -= append_number(words, get_cor_hour(fuzzy_hours));
-    }
     else if (fuzzy_minutes >= 50)
     {
       remaining -= append_number(words, 60 - fuzzy_minutes);

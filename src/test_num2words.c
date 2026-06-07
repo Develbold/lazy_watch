@@ -8,35 +8,30 @@ static void print_oneline(const char *buf) {
         putchar(*p == '\n' ? ' ' : *p);
 }
 
-int main(void) {
+static void print_time(int h, int m) {
     char buf[BUFFER_SIZE];
+    fuzzy_time_to_words(h, m, buf, BUFFER_SIZE);
+    printf("%2d:%02d  ", h, m);
+    print_oneline(buf);
+    putchar('\n');
+}
 
-    for (int m = 0; m < 60; m++) {
-        fuzzy_time_to_words(10, m, buf, BUFFER_SIZE);
-        printf("10:%02d  ", m);
-        print_oneline(buf);
-        putchar('\n');
-    }
+static void print_hour(int h) {
+    for (int m = 0; m < 60; m++)
+        print_time(h, m);
+}
+
+int main(void) {
+    print_hour(10);
 
     printf("\n--- hour 1 ---\n");
-    for (int m = 0; m < 60; m++) {
-        fuzzy_time_to_words(1, m, buf, BUFFER_SIZE);
-        printf(" 1:%02d  ", m);
-        print_oneline(buf);
-        putchar('\n');
-    }
+    print_hour(1);
 
     printf("\n--- noon ---\n");
-    fuzzy_time_to_words(12, 0, buf, BUFFER_SIZE);
-    printf("12:00  ");
-    print_oneline(buf);
-    putchar('\n');
+    print_time(12, 0);
 
     printf("\n--- midnight ---\n");
-    fuzzy_time_to_words(0, 0, buf, BUFFER_SIZE);
-    printf(" 0:00  ");
-    print_oneline(buf);
-    putchar('\n');
+    print_time(0, 0);
 
     return 0;
 }
