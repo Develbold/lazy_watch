@@ -1,14 +1,28 @@
 {
   "name": "lazy_watch_ger",
   "author": "MegustaCode",
-  "keywords": ["pebble-app"],
+  "keywords": [
+    "pebble-app"
+  ],
   "version": "0.6.2",
-  "dependencies": {},
+  "dependencies": {
+    "pebble-clay": "^1.0.4"
+  },
   "pebble": {
     "displayName": "Lazy Watch German",
     "uuid": "06b0ddaf-325b-40f3-97b1-434b4f950bf7",
     "sdkVersion": "3",
-    "targetPlatforms": ["aplite", "basalt", "diorite", "emery"],
+    "enableMultiJS": true,
+    "messageKeys": {
+      "backgroundColor": 1,
+      "textColor": 2
+    },
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "diorite",
+      "emery"
+    ],
     "watchapp": {
       "watchface": true
     },
