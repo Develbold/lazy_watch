@@ -8,14 +8,16 @@ module.exports = [
         "messageKey": "backgroundColor",
         "label": "Background",
         "defaultValue": "000000",
-        "sunlight": true
+        "sunlight": true,
+        "layout": "COLOR"
       },
       {
         "type": "color",
         "messageKey": "textColor",
         "label": "Text",
         "defaultValue": "FFFFFF",
-        "sunlight": true
+        "sunlight": true,
+        "layout": "COLOR"
       }
     ]
   },
