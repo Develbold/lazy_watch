@@ -30,6 +30,9 @@ static GFont s_font_small;
 static GFont s_font_medium;
 static GFont s_font_large;
 static Layer *root_layer;
+static GFont s_current_font;
+static int16_t s_current_y;
+static char s_old_buffer[BUFFER_SIZE];
 
 static GFont choose_font(const char *text, GSize *out_size) {
   GRect narrow_box = GRect(0, 0, frame.size.w, 10000);
@@ -52,13 +55,51 @@ static GFont choose_font(const char *text, GSize *out_size) {
   return s_font_small;
 }
 
+static void old_label_anim_stopped(Animation *animation, bool finished, void *context) {
+  TextLayer *old_label = (TextLayer *)context;
+  layer_remove_from_parent(text_layer_get_layer(old_label));
+  text_layer_destroy(old_label);
+}
+
+static void slide_out_old(const char *old_text, GFont old_font, int16_t old_y) {
+  TextLayer *old_label = text_layer_create(GRect(0, old_y, frame.size.w, frame.size.h));
+  text_layer_set_background_color(old_label, s_bg_color);
+  text_layer_set_text_color(old_label, s_text_color);
+  text_layer_set_font(old_label, old_font);
+  text_layer_set_text_alignment(old_label, GTextAlignmentCenter);
+  text_layer_set_text(old_label, old_text);
+  layer_add_child(root_layer, text_layer_get_layer(old_label));
+
+  GRect frame_from = GRect(0, old_y, frame.size.w, frame.size.h);
+  GRect frame_to = GRect(-frame.size.w, old_y, frame.size.w, frame.size.h);
+
+  PropertyAnimation *anim = property_animation_create_layer_frame(
+      text_layer_get_layer(old_label), &frame_from, &frame_to);
+  animation_set_duration((Animation *)anim, 400);
+  animation_set_curve((Animation *)anim, AnimationCurveEaseIn);
+  animation_set_handlers((Animation *)anim,
+      (AnimationHandlers){ .stopped = old_label_anim_stopped }, old_label);
+  animation_schedule((Animation *)anim);
+}
+
 static void update_time(struct tm *t) {
+  bool has_old_text = s_data.buffer[0] != '\0';
+  if (has_old_text) {
+    strncpy(s_old_buffer, s_data.buffer, BUFFER_SIZE);
+    s_old_buffer[BUFFER_SIZE - 1] = '\0';
+  }
+  GFont old_font = s_current_font;
+  int16_t old_y = s_current_y;
+
   fuzzy_time_to_words(t->tm_hour, t->tm_min, s_data.buffer, BUFFER_SIZE);
 
   GSize content_size;
-  text_layer_set_font(s_data.label, choose_font(s_data.buffer, &content_size));
+  GFont new_font = choose_font(s_data.buffer, &content_size);
+  text_layer_set_font(s_data.label, new_font);
   text_layer_set_text(s_data.label, s_data.buffer);
   int16_t y = (frame.size.h - content_size.h) / 2 - HEIGHT_CORRECTION;
+  s_current_font = new_font;
+  s_current_y = y;
 
   GRect frame_from = GRect(frame.size.w, y, frame.size.w, frame.size.h);
   GRect frame_to = GRect(0, y, frame.size.w, frame.size.h);
@@ -71,6 +112,10 @@ static void update_time(struct tm *t) {
   animation_set_curve((Animation *)slide_animation, AnimationCurveEaseIn);
   animation_set_delay((Animation *)slide_animation, 0);
   animation_schedule((Animation *)slide_animation);
+
+  if (has_old_text) {
+    slide_out_old(s_old_buffer, old_font, old_y);
+  }
 }
 
 static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
