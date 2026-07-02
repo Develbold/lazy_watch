@@ -12,34 +12,31 @@ Originally forked from [MegustaCode/lazy_watch](https://github.com/MegustaCode/l
 
 ## Features
 
-**German fuzzy time** — time is spoken in natural German rather than shown as digits:
+- **German fuzzy time**: time is spoken in natural German rather than shown as digits:
 
-| Time | Display |
-|------|---------|
-| 3:00 | `drei` |
-| 12:00 | `zwölf` |
-| 0:00 | `null` |
-| 3:05 / 3:10 | `fünf nach drei` / `zehn nach drei` |
-| 3:15 | `viertel nach drei` |
-| 3:30 | `halb vier` |
-| 3:45 | `viertel vor vier` |
-| 3:50 / 3:55 | `zehn vor vier` / `fünf vor vier` |
-| 3:22 | `drei uhr zwei und zwanzig` |
+  | Time | Display |
+  |------|---------|
+  | 3:00 | `drei` |
+  | 12:00 | `zwölf` |
+  | 0:00 | `null` |
+  | 3:05 / 3:10 | `fünf nach drei` / `zehn nach drei` |
+  | 3:15 | `viertel nach drei` |
+  | 3:30 | `halb vier` |
+  | 3:45 | `viertel vor vier` |
+  | 3:50 / 3:55 | `zehn vor vier` / `fünf vor vier` |
+  | 3:22 | `drei uhr zwei und zwanzig` |
 
-**Adaptive font sizing** — automatically picks from three font sizes (small, medium, large) so the text always fills the screen as large as possible without overflow.
-
-**Slide animation** — on every minute tick, the outgoing text slides left off-screen while the new text slides in from the right.
-
-**Configurable colors** — background and text color are independently configurable via the Pebble app. Settings persist across reboots.
-
-**Timeline Quick View** — the layout adapts when Pebble's timeline peek overlays the watchface.
+- **Adaptive font sizing**: automatically picks from three font sizes (small, medium, large) so the text always fills the screen as large as possible without overflow.
+- **Slide animation**: on every minute tick, the outgoing text slides left off-screen while the new text slides in from the right.
+- **Configurable colors**: background and text color are independently configurable via the Pebble app. Settings persist across reboots.
+- **Timeline Quick View**: the layout adapts when Pebble's timeline peek overlays the watchface.
 
 ## Supported platforms
 
-- **Aplite** — Pebble / Pebble Steel
-- **Basalt** — Pebble Time / Pebble Time Steel
-- **Diorite** — Pebble 2
-- **Emery** — Pebble Time 2
+- **Aplite**: Pebble / Pebble Steel
+- **Basalt**: Pebble Time / Pebble Time Steel
+- **Diorite**: Pebble 2
+- **Emery**: Pebble Time 2
 
 ## Building
 
