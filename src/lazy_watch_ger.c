@@ -25,6 +25,7 @@ static struct CommonWordsData {
 } s_data;
 
 static PropertyAnimation *slide_animation;
+static PropertyAnimation *slide_out_animation;
 static GRect frame;
 static GFont s_font_small;
 static GFont s_font_medium;
@@ -32,7 +33,6 @@ static GFont s_font_large;
 static Layer *root_layer;
 static GFont s_current_font;
 static int16_t s_current_y;
-static char s_old_buffer[BUFFER_SIZE];
 
 static GFont choose_font(const char *text, GSize *out_size) {
   GRect narrow_box = GRect(0, 0, frame.size.w, 10000);
@@ -65,9 +65,13 @@ static void old_label_anim_stopped(Animation *animation, bool finished, void *co
   layer_remove_from_parent(text_layer_get_layer(ctx->label));
   text_layer_destroy(ctx->label);
   free(ctx);
+  slide_out_animation = NULL;
 }
 
 static void slide_out_old(const char *old_text, GFont old_font, int16_t old_y) {
+  if (slide_out_animation) {
+    animation_unschedule((Animation *)slide_out_animation);
+  }
   SlideOutCtx *ctx = malloc(sizeof(SlideOutCtx));
   if (!ctx) return;
   strncpy(ctx->text, old_text, BUFFER_SIZE - 1);
@@ -90,16 +94,21 @@ static void slide_out_old(const char *old_text, GFont old_font, int16_t old_y) {
   animation_set_handlers((Animation *)anim,
       (AnimationHandlers){ .stopped = old_label_anim_stopped }, ctx);
   animation_schedule((Animation *)anim);
+  slide_out_animation = anim;
+}
+
+static void slide_anim_stopped(Animation *animation, bool finished, void *context) {
+  slide_animation = NULL;
 }
 
 static void update_time(struct tm *t) {
   bool has_old_text = s_data.buffer[0] != '\0';
-  if (has_old_text) {
-    strncpy(s_old_buffer, s_data.buffer, BUFFER_SIZE);
-    s_old_buffer[BUFFER_SIZE - 1] = '\0';
-  }
   GFont old_font = s_current_font;
   int16_t old_y = s_current_y;
+
+  if (has_old_text) {
+    slide_out_old(s_data.buffer, old_font, old_y);
+  }
 
   fuzzy_time_to_words(t->tm_hour, t->tm_min, s_data.buffer, BUFFER_SIZE);
 
@@ -118,16 +127,14 @@ static void update_time(struct tm *t) {
     animation_unschedule((Animation *)slide_animation);
     slide_animation = NULL;
   }
+  layer_set_frame(text_layer_get_layer(s_data.label), frame_from);
   slide_animation = property_animation_create_layer_frame(
       text_layer_get_layer(s_data.label), &frame_from, &frame_to);
   animation_set_duration((Animation *)slide_animation, 400);
   animation_set_curve((Animation *)slide_animation, AnimationCurveEaseIn);
-  animation_set_delay((Animation *)slide_animation, 0);
+  animation_set_handlers((Animation *)slide_animation,
+      (AnimationHandlers){ .stopped = slide_anim_stopped }, NULL);
   animation_schedule((Animation *)slide_animation);
-
-  if (has_old_text) {
-    slide_out_old(s_old_buffer, old_font, old_y);
-  }
 }
 
 static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
@@ -164,7 +171,8 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
 static void __attribute__((unused)) unobstructed_area_will_change(GRect final_area, void *context) {
   frame = final_area;
   time_t now = time(NULL);
-  update_time(localtime(&now));
+  struct tm *t = localtime(&now);
+  if (t) update_time(t);
 }
 
 static void do_init(void) {
@@ -188,7 +196,7 @@ static void do_init(void) {
 
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
-  update_time(t);
+  if (t) update_time(t);
 
   app_message_register_inbox_received(inbox_received);
   app_message_open(64, 64);
