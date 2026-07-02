@@ -6,6 +6,7 @@
 
 #define PERSIST_KEY_BG_COLOR   1
 #define PERSIST_KEY_TEXT_COLOR 2
+#define PERSIST_KEY_ALIGN      3
 
 static GColor s_bg_color;
 static GColor s_text_color;
@@ -32,7 +33,8 @@ static GFont s_font_medium;
 static GFont s_font_large;
 static Layer *root_layer;
 static GFont s_current_font;
-static int16_t s_current_y;
+static GRect s_label_dest;
+static bool s_align_longest;
 
 static GFont choose_font(const char *text, GSize *out_size) {
   GRect narrow_box = GRect(0, 0, frame.size.w, 10000);
@@ -55,6 +57,32 @@ static GFont choose_font(const char *text, GSize *out_size) {
   return s_font_small;
 }
 
+static GRect label_rect(const char *text, GFont font, int16_t y) {
+  if (!s_align_longest) {
+    return GRect(0, y, frame.size.w, frame.size.h);
+  }
+  GRect wide_box = GRect(0, 0, 10000, 10000);
+  int16_t max_w = 0;
+  const char *p = text;
+  while (true) {
+    const char *nl = strchr(p, '\n');
+    size_t len = nl ? (size_t)(nl - p) : strlen(p);
+    if (len > 0) {
+      char line[BUFFER_SIZE];
+      if (len >= BUFFER_SIZE) len = BUFFER_SIZE - 1;
+      strncpy(line, p, len);
+      line[len] = '\0';
+      GSize sz = graphics_text_layout_get_content_size(
+          line, font, wide_box, GTextOverflowModeWordWrap, GTextAlignmentLeft);
+      if (sz.w > max_w) max_w = sz.w;
+    }
+    if (!nl) break;
+    p = nl + 1;
+  }
+  if (max_w == 0 || max_w > frame.size.w) max_w = frame.size.w;
+  return GRect((frame.size.w - max_w) / 2, y, max_w, frame.size.h);
+}
+
 typedef struct {
   TextLayer *label;
   char text[BUFFER_SIZE];
@@ -68,7 +96,7 @@ static void old_label_anim_stopped(Animation *animation, bool finished, void *co
   slide_out_animation = NULL;
 }
 
-static void slide_out_old(const char *old_text, GFont old_font, int16_t old_y) {
+static void slide_out_old(const char *old_text, GFont old_font, GRect old_rect) {
   if (slide_out_animation) {
     animation_unschedule((Animation *)slide_out_animation);
   }
@@ -76,16 +104,17 @@ static void slide_out_old(const char *old_text, GFont old_font, int16_t old_y) {
   if (!ctx) return;
   strncpy(ctx->text, old_text, BUFFER_SIZE - 1);
   ctx->text[BUFFER_SIZE - 1] = '\0';
-  ctx->label = text_layer_create(GRect(0, old_y, frame.size.w, frame.size.h));
+  ctx->label = text_layer_create(old_rect);
   text_layer_set_background_color(ctx->label, s_bg_color);
   text_layer_set_text_color(ctx->label, s_text_color);
   text_layer_set_font(ctx->label, old_font);
-  text_layer_set_text_alignment(ctx->label, GTextAlignmentCenter);
+  text_layer_set_text_alignment(ctx->label,
+      s_align_longest ? GTextAlignmentLeft : GTextAlignmentCenter);
   text_layer_set_text(ctx->label, ctx->text);
   layer_add_child(root_layer, text_layer_get_layer(ctx->label));
 
-  GRect frame_from = GRect(0, old_y, frame.size.w, frame.size.h);
-  GRect frame_to = GRect(-frame.size.w, old_y, frame.size.w, frame.size.h);
+  GRect frame_from = old_rect;
+  GRect frame_to = GRect(-frame.size.w, old_rect.origin.y, old_rect.size.w, old_rect.size.h);
 
   PropertyAnimation *anim = property_animation_create_layer_frame(
       text_layer_get_layer(ctx->label), &frame_from, &frame_to);
@@ -104,10 +133,10 @@ static void slide_anim_stopped(Animation *animation, bool finished, void *contex
 static void update_time(struct tm *t) {
   bool has_old_text = s_data.buffer[0] != '\0';
   GFont old_font = s_current_font;
-  int16_t old_y = s_current_y;
+  GRect old_rect = s_label_dest;
 
   if (has_old_text) {
-    slide_out_old(s_data.buffer, old_font, old_y);
+    slide_out_old(s_data.buffer, old_font, old_rect);
   }
 
   fuzzy_time_to_words(t->tm_hour, t->tm_min, s_data.buffer, BUFFER_SIZE);
@@ -115,13 +144,15 @@ static void update_time(struct tm *t) {
   GSize content_size;
   GFont new_font = choose_font(s_data.buffer, &content_size);
   text_layer_set_font(s_data.label, new_font);
+  text_layer_set_text_alignment(s_data.label,
+      s_align_longest ? GTextAlignmentLeft : GTextAlignmentCenter);
   text_layer_set_text(s_data.label, s_data.buffer);
   int16_t y = (frame.size.h - content_size.h) / 2 - HEIGHT_CORRECTION;
   s_current_font = new_font;
-  s_current_y = y;
 
-  GRect frame_from = GRect(frame.size.w, y, frame.size.w, frame.size.h);
-  GRect frame_to = GRect(0, y, frame.size.w, frame.size.h);
+  GRect frame_to = label_rect(s_data.buffer, new_font, y);
+  GRect frame_from = GRect(frame.size.w, y, frame_to.size.w, frame_to.size.h);
+  s_label_dest = frame_to;
 
   if (slide_animation) {
     animation_unschedule((Animation *)slide_animation);
@@ -146,6 +177,8 @@ static void load_colors(void) {
       ? GColorFromHEX(persist_read_int(PERSIST_KEY_BG_COLOR)) : GColorBlack;
   s_text_color = persist_exists(PERSIST_KEY_TEXT_COLOR)
       ? GColorFromHEX(persist_read_int(PERSIST_KEY_TEXT_COLOR)) : GColorWhite;
+  s_align_longest = persist_exists(PERSIST_KEY_ALIGN)
+      ? (bool)persist_read_int(PERSIST_KEY_ALIGN) : false;
 }
 
 static void apply_colors(void) {
@@ -155,8 +188,9 @@ static void apply_colors(void) {
 }
 
 static void inbox_received(DictionaryIterator *iter, void *context) {
-  Tuple *bg = dict_find(iter, MESSAGE_KEY_backgroundColor);
-  Tuple *fg = dict_find(iter, MESSAGE_KEY_textColor);
+  Tuple *bg    = dict_find(iter, MESSAGE_KEY_backgroundColor);
+  Tuple *fg    = dict_find(iter, MESSAGE_KEY_textColor);
+  Tuple *align = dict_find(iter, MESSAGE_KEY_blockAlign);
   if (bg) {
     persist_write_int(PERSIST_KEY_BG_COLOR, bg->value->uint32);
     s_bg_color = GColorFromHEX(bg->value->uint32);
@@ -166,6 +200,14 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
     s_text_color = GColorFromHEX(fg->value->uint32);
   }
   apply_colors();
+  if (align) {
+    bool val = align->value->int8 != 0;
+    persist_write_int(PERSIST_KEY_ALIGN, val ? 1 : 0);
+    s_align_longest = val;
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) update_time(t);
+  }
 }
 
 static void __attribute__((unused)) unobstructed_area_will_change(GRect final_area, void *context) {

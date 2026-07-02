@@ -1,10 +1,10 @@
 {
   "name": "lazy_watch_ger",
-  "author": "MegustaCode",
+  "author": "Develbold",
   "keywords": [
     "pebble-app"
   ],
-  "version": "0.6.2",
+  "version": "0.7.0",
   "dependencies": {
     "pebble-clay": "^1.0.4"
   },
@@ -15,7 +15,8 @@
     "enableMultiJS": true,
     "messageKeys": {
       "backgroundColor": 1,
-      "textColor": 2
+      "textColor": 2,
+      "blockAlign": 3
     },
     "targetPlatforms": [
       "aplite",

@@ -21,5 +21,17 @@ module.exports = [
       }
     ]
   },
+  {
+    "type": "section",
+    "items": [
+      { "type": "heading", "defaultValue": "Layout" },
+      {
+        "type": "toggle",
+        "messageKey": "blockAlign",
+        "label": "Align by longest word",
+        "defaultValue": false
+      }
+    ]
+  },
   { "type": "submit", "defaultValue": "Save" }
 ];
