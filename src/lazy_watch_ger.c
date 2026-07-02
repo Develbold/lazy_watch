@@ -55,30 +55,40 @@ static GFont choose_font(const char *text, GSize *out_size) {
   return s_font_small;
 }
 
+typedef struct {
+  TextLayer *label;
+  char text[BUFFER_SIZE];
+} SlideOutCtx;
+
 static void old_label_anim_stopped(Animation *animation, bool finished, void *context) {
-  TextLayer *old_label = (TextLayer *)context;
-  layer_remove_from_parent(text_layer_get_layer(old_label));
-  text_layer_destroy(old_label);
+  SlideOutCtx *ctx = (SlideOutCtx *)context;
+  layer_remove_from_parent(text_layer_get_layer(ctx->label));
+  text_layer_destroy(ctx->label);
+  free(ctx);
 }
 
 static void slide_out_old(const char *old_text, GFont old_font, int16_t old_y) {
-  TextLayer *old_label = text_layer_create(GRect(0, old_y, frame.size.w, frame.size.h));
-  text_layer_set_background_color(old_label, s_bg_color);
-  text_layer_set_text_color(old_label, s_text_color);
-  text_layer_set_font(old_label, old_font);
-  text_layer_set_text_alignment(old_label, GTextAlignmentCenter);
-  text_layer_set_text(old_label, old_text);
-  layer_add_child(root_layer, text_layer_get_layer(old_label));
+  SlideOutCtx *ctx = malloc(sizeof(SlideOutCtx));
+  if (!ctx) return;
+  strncpy(ctx->text, old_text, BUFFER_SIZE - 1);
+  ctx->text[BUFFER_SIZE - 1] = '\0';
+  ctx->label = text_layer_create(GRect(0, old_y, frame.size.w, frame.size.h));
+  text_layer_set_background_color(ctx->label, s_bg_color);
+  text_layer_set_text_color(ctx->label, s_text_color);
+  text_layer_set_font(ctx->label, old_font);
+  text_layer_set_text_alignment(ctx->label, GTextAlignmentCenter);
+  text_layer_set_text(ctx->label, ctx->text);
+  layer_add_child(root_layer, text_layer_get_layer(ctx->label));
 
   GRect frame_from = GRect(0, old_y, frame.size.w, frame.size.h);
   GRect frame_to = GRect(-frame.size.w, old_y, frame.size.w, frame.size.h);
 
   PropertyAnimation *anim = property_animation_create_layer_frame(
-      text_layer_get_layer(old_label), &frame_from, &frame_to);
+      text_layer_get_layer(ctx->label), &frame_from, &frame_to);
   animation_set_duration((Animation *)anim, 400);
   animation_set_curve((Animation *)anim, AnimationCurveEaseIn);
   animation_set_handlers((Animation *)anim,
-      (AnimationHandlers){ .stopped = old_label_anim_stopped }, old_label);
+      (AnimationHandlers){ .stopped = old_label_anim_stopped }, ctx);
   animation_schedule((Animation *)anim);
 }
 
@@ -104,8 +114,10 @@ static void update_time(struct tm *t) {
   GRect frame_from = GRect(frame.size.w, y, frame.size.w, frame.size.h);
   GRect frame_to = GRect(0, y, frame.size.w, frame.size.h);
 
-  layer_set_frame(text_layer_get_layer(s_data.label), frame_to);
-
+  if (slide_animation) {
+    animation_unschedule((Animation *)slide_animation);
+    slide_animation = NULL;
+  }
   slide_animation = property_animation_create_layer_frame(
       text_layer_get_layer(s_data.label), &frame_from, &frame_to);
   animation_set_duration((Animation *)slide_animation, 400);
