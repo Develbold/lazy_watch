@@ -12,4 +12,4 @@ clean-test:
 	rm -f $(TEST_BIN)
 
 screenshots:
-	bash scripts/take_screenshots.sh
+	bash scripts/take_screenshots.sh $(TIME)

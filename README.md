@@ -49,6 +49,15 @@ pebble build
 
 Requires the [Pebble SDK](https://developer.rebble.io/developer.pebble.com/sdk/index.html). The compiled `.pbw` is written to `build/`.
 
+## Taking screenshots
+
+```sh
+make screenshots           # capture at current time
+make screenshots TIME=10:10  # capture at a specific time
+```
+
+Builds the project, boots a QEMU emulator for each supported platform, installs the watchface, and saves `screenshots/{platform}_{HH-MM}.png`. Requires `jq`.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). The German word-conversion logic derives from Pebble Technology's `fuzzy_time` SDK example, also MIT licensed.
