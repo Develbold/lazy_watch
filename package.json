@@ -1,0 +1,53 @@
+{
+  "name": "lazy_watch_ger",
+  "author": "Develbold",
+  "keywords": [
+    "pebble-app"
+  ],
+  "version": "0.7.0",
+  "dependencies": {
+    "pebble-clay": "^1.0.4"
+  },
+  "pebble": {
+    "displayName": "Lazy Watch German",
+    "uuid": "06b0ddaf-325b-40f3-97b1-434b4f950bf7",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "messageKeys": {
+      "backgroundColor": 1,
+      "textColor": 2,
+      "blockAlign": 3
+    },
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "diorite",
+      "emery"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "resources": {
+      "media": [
+        {
+          "type": "font",
+          "name": "CaviarDreamsBold_29",
+          "file": "fonts/CaviarDreamsBold_29.ttf",
+          "characterRegex": "[A-Za-züö]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsBold_38",
+          "file": "fonts/CaviarDreamsBold_29.ttf",
+          "characterRegex": "[A-Za-züö]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsBold_52",
+          "file": "fonts/CaviarDreamsBold_29.ttf",
+          "characterRegex": "[A-Za-züö]"
+        }
+      ]
+    }
+  }
+}
