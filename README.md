@@ -2,6 +2,8 @@
 
 A Pebble watchface that displays the time as spoken German phrases, using a large custom font with smooth slide animations on every minute change.
 
+Originally forked from [MegustaCode/lazy_watch](https://github.com/MegustaCode/lazy_watch), which is a German translation of Pebble's official `fuzzy_time` SDK example.
+
 ## Screenshots
 
 | Pebble Time 2 (emery) | Pebble Time (basalt) | Pebble Classic (aplite) |
@@ -19,7 +21,7 @@ A Pebble watchface that displays the time as spoken German phrases, using a larg
 | 0:00 | `null` |
 | 3:05 / 3:10 | `fünf nach drei` / `zehn nach drei` |
 | 3:15 | `viertel nach drei` |
-| 3:30 | `halb vier` *(German half-hour references the next hour)* |
+| 3:30 | `halb vier` |
 | 3:45 | `viertel vor vier` |
 | 3:50 / 3:55 | `zehn vor vier` / `fünf vor vier` |
 | 3:22 | `drei uhr zwei und zwanzig` |
@@ -49,4 +51,4 @@ Requires the [Pebble SDK](https://developer.rebble.io/developer.pebble.com/sdk/i
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). The German word-conversion logic derives from Pebble Technology's `fuzzy_time` SDK example, also MIT licensed.
