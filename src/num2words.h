@@ -16,4 +16,6 @@ typedef enum
 //#define CAPITAL
 #define HALF_CAPITAL
 
+#define FUZZY_TIME_BUFFER_SIZE 86
+
 void fuzzy_time_to_words(int hours, int minutes, char* words, size_t length);

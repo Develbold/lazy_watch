@@ -1,7 +1,6 @@
 #include "pebble.h"
 #include "num2words.h"
 
-#define BUFFER_SIZE 86
 #define FONT_MARGIN 20
 
 #define PERSIST_KEY_BG_COLOR   1
@@ -22,7 +21,7 @@ static GColor s_text_color;
 static struct CommonWordsData {
   TextLayer *label;
   Window *window;
-  char buffer[BUFFER_SIZE];
+  char buffer[FUZZY_TIME_BUFFER_SIZE];
 } s_data;
 
 static PropertyAnimation *slide_animation;
@@ -68,8 +67,8 @@ static GRect label_rect(const char *text, GFont font, int16_t y) {
     const char *nl = strchr(p, '\n');
     size_t len = nl ? (size_t)(nl - p) : strlen(p);
     if (len > 0) {
-      char line[BUFFER_SIZE];
-      if (len >= BUFFER_SIZE) len = BUFFER_SIZE - 1;
+      char line[FUZZY_TIME_BUFFER_SIZE];
+      if (len >= FUZZY_TIME_BUFFER_SIZE) len = FUZZY_TIME_BUFFER_SIZE - 1;
       strncpy(line, p, len);
       line[len] = '\0';
       GSize sz = graphics_text_layout_get_content_size(
@@ -85,7 +84,7 @@ static GRect label_rect(const char *text, GFont font, int16_t y) {
 
 typedef struct {
   TextLayer *label;
-  char text[BUFFER_SIZE];
+  char text[FUZZY_TIME_BUFFER_SIZE];
 } SlideOutCtx;
 
 static void old_label_anim_stopped(Animation *animation, bool finished, void *context) {
@@ -102,8 +101,8 @@ static void slide_out_old(const char *old_text, GFont old_font, GRect old_rect) 
   }
   SlideOutCtx *ctx = malloc(sizeof(SlideOutCtx));
   if (!ctx) return;
-  strncpy(ctx->text, old_text, BUFFER_SIZE - 1);
-  ctx->text[BUFFER_SIZE - 1] = '\0';
+  strncpy(ctx->text, old_text, FUZZY_TIME_BUFFER_SIZE - 1);
+  ctx->text[FUZZY_TIME_BUFFER_SIZE - 1] = '\0';
   ctx->label = text_layer_create(old_rect);
   text_layer_set_background_color(ctx->label, s_bg_color);
   text_layer_set_text_color(ctx->label, s_text_color);
@@ -139,7 +138,7 @@ static void update_time(struct tm *t) {
     slide_out_old(s_data.buffer, old_font, old_rect);
   }
 
-  fuzzy_time_to_words(t->tm_hour, t->tm_min, s_data.buffer, BUFFER_SIZE);
+  fuzzy_time_to_words(t->tm_hour, t->tm_min, s_data.buffer, FUZZY_TIME_BUFFER_SIZE);
 
   GSize content_size;
   GFont new_font = choose_font(s_data.buffer, &content_size);

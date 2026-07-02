@@ -1,16 +1,14 @@
 #include "num2words.h"
 #include <stdio.h>
 
-#define BUFFER_SIZE 86
-
 static void print_oneline(const char *buf) {
     for (const char *p = buf; *p; p++)
         putchar(*p == '\n' ? ' ' : *p);
 }
 
 static void print_time(int h, int m) {
-    char buf[BUFFER_SIZE];
-    fuzzy_time_to_words(h, m, buf, BUFFER_SIZE);
+    char buf[FUZZY_TIME_BUFFER_SIZE];
+    fuzzy_time_to_words(h, m, buf, FUZZY_TIME_BUFFER_SIZE);
     printf("%2d:%02d  ", h, m);
     print_oneline(buf);
     putchar('\n');
