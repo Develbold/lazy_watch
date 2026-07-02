@@ -8,7 +8,7 @@ Originally forked from [MegustaCode/lazy_watch](https://github.com/MegustaCode/l
 
 | Pebble Time 2 (emery) | Pebble Time (basalt) | Pebble Classic (aplite) |
 |:---:|:---:|:---:|
-| ![halb Elf](screenshot_emery.png) | ![Zehn Nach Zehn](screenshots/basalt_0.6.2_20260702-104735.png) | ![Neun Uhr Acht Und Dreissig](screenshots/aplite.png) |
+| ![Zehn Nach Zehn](screenshots/emery_10-10.png) | ![Zehn Nach Zehn](screenshots/basalt_10-10.png) | ![Zehn Nach Zehn](screenshots/aplite_10-10.png) |
 
 ## Features
 
