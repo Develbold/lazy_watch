@@ -130,15 +130,19 @@ static void slide_anim_stopped(Animation *animation, bool finished, void *contex
 }
 
 static void update_time(struct tm *t) {
+  char new_text[FUZZY_TIME_BUFFER_SIZE];
+  fuzzy_time_to_words(t->tm_hour, t->tm_min, new_text, FUZZY_TIME_BUFFER_SIZE);
+
   bool has_old_text = s_data.buffer[0] != '\0';
+  bool text_changed = !has_old_text || strcmp(s_data.buffer, new_text) != 0;
   GFont old_font = s_current_font;
   GRect old_rect = s_label_dest;
 
-  if (has_old_text) {
+  if (has_old_text && text_changed) {
     slide_out_old(s_data.buffer, old_font, old_rect);
   }
 
-  fuzzy_time_to_words(t->tm_hour, t->tm_min, s_data.buffer, FUZZY_TIME_BUFFER_SIZE);
+  memcpy(s_data.buffer, new_text, FUZZY_TIME_BUFFER_SIZE);
 
   GSize content_size;
   GFont new_font = choose_font(s_data.buffer, &content_size);
@@ -150,13 +154,22 @@ static void update_time(struct tm *t) {
   s_current_font = new_font;
 
   GRect frame_to = label_rect(s_data.buffer, new_font, y);
-  GRect frame_from = GRect(frame.size.w, y, frame_to.size.w, frame_to.size.h);
   s_label_dest = frame_to;
 
   if (slide_animation) {
     animation_unschedule((Animation *)slide_animation);
     slide_animation = NULL;
   }
+
+  if (!text_changed) {
+    // Reposition instantly (e.g. a reflow after obstruction/frame change) —
+    // nothing actually changed on screen, so replaying the slide would be a
+    // redundant duplicate transition.
+    layer_set_frame(text_layer_get_layer(s_data.label), frame_to);
+    return;
+  }
+
+  GRect frame_from = GRect(frame.size.w, y, frame_to.size.w, frame_to.size.h);
   layer_set_frame(text_layer_get_layer(s_data.label), frame_from);
   slide_animation = property_animation_create_layer_frame(
       text_layer_get_layer(s_data.label), &frame_from, &frame_to);
