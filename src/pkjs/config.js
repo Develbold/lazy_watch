@@ -33,5 +33,22 @@ module.exports = [
       }
     ]
   },
+  {
+    "type": "section",
+    "items": [
+      { "type": "heading", "defaultValue": "Readability" },
+      {
+        "type": "select",
+        "messageKey": "wordStyle",
+        "label": "\"vor\" / \"nach\" / \"Uhr\" style",
+        "defaultValue": "bold",
+        "options": [
+          { "label": "Bold", "value": "bold" },
+          { "label": "Normal", "value": "normal" },
+          { "label": "Italic", "value": "italic" }
+        ]
+      }
+    ]
+  },
   { "type": "submit", "defaultValue": "Save" }
 ];

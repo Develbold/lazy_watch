@@ -1,5 +1,17 @@
 #include "num2words.h"
+#include <assert.h>
 #include <stdio.h>
+
+static void test_is_connector_word(void) {
+    assert(fuzzy_time_is_connector_word("Vor"));
+    assert(fuzzy_time_is_connector_word("Nach"));
+    assert(fuzzy_time_is_connector_word("Uhr"));
+    assert(!fuzzy_time_is_connector_word("Zehn"));
+    assert(!fuzzy_time_is_connector_word("Viertel"));
+    assert(!fuzzy_time_is_connector_word(""));
+    assert(!fuzzy_time_is_connector_word("vor"));
+    printf("test_is_connector_word: OK\n");
+}
 
 static void print_oneline(const char *buf) {
     for (const char *p = buf; *p; p++)
@@ -20,6 +32,8 @@ static void print_hour(int h) {
 }
 
 int main(void) {
+    test_is_connector_word();
+
     print_hour(10);
 
     printf("\n--- hour 1 ---\n");

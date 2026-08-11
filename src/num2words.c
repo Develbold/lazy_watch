@@ -231,6 +231,13 @@ static size_t append_number(char* words, size_t remaining, int num)
   return len;
 }
 
+bool fuzzy_time_is_connector_word(const char* line)
+{
+  return strcmp(line, STR_TO) == 0
+      || strcmp(line, STR_AFTER) == 0
+      || strcmp(line, STR_OH_CLOCK) == 0;
+}
+
 void fuzzy_time_to_words(int fuzzy_hours, int fuzzy_minutes, char* words, size_t length)
 {
   size_t remaining = length;

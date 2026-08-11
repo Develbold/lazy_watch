@@ -16,7 +16,8 @@
     "messageKeys": {
       "backgroundColor": 1,
       "textColor": 2,
-      "blockAlign": 3
+      "blockAlign": 3,
+      "wordStyle": 4
     },
     "targetPlatforms": [
       "aplite",
