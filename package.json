@@ -17,7 +17,12 @@
       "backgroundColor": 1,
       "textColor": 2,
       "blockAlign": 3,
-      "wordStyle": 4
+      "wordStyle": 4,
+      "nightModeEnabled": 5,
+      "nightBackgroundColor": 6,
+      "nightTextColor": 7,
+      "nightModeStart": 8,
+      "nightModeEnd": 9
     },
     "targetPlatforms": [
       "aplite",

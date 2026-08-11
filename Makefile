@@ -5,7 +5,7 @@ TEST_BIN = src/test_num2words
 test: $(TEST_BIN)
 	./$(TEST_BIN)
 
-$(TEST_BIN): src/test_num2words.c src/num2words.c
+$(TEST_BIN): src/test_num2words.c src/num2words.c src/night_mode.c
 	gcc -I src -o $@ $^
 
 clean-test:

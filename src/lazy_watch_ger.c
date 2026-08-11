@@ -1,12 +1,18 @@
 #include "pebble.h"
 #include "num2words.h"
+#include "night_mode.h"
 
 #define FONT_MARGIN 20
 
-#define PERSIST_KEY_BG_COLOR   1
-#define PERSIST_KEY_TEXT_COLOR 2
-#define PERSIST_KEY_ALIGN      3
-#define PERSIST_KEY_WORD_STYLE 4
+#define PERSIST_KEY_BG_COLOR         1
+#define PERSIST_KEY_TEXT_COLOR       2
+#define PERSIST_KEY_ALIGN            3
+#define PERSIST_KEY_WORD_STYLE       4
+#define PERSIST_KEY_NIGHT_ENABLED    5
+#define PERSIST_KEY_NIGHT_BG_COLOR   6
+#define PERSIST_KEY_NIGHT_TEXT_COLOR 7
+#define PERSIST_KEY_NIGHT_START      8
+#define PERSIST_KEY_NIGHT_END        9
 
 enum { FONT_TIER_LARGE = 0, FONT_TIER_MEDIUM = 1, FONT_TIER_SMALL = 2, FONT_TIER_COUNT = 3 };
 enum { WORD_STYLE_BOLD = 0, WORD_STYLE_NORMAL = 1, WORD_STYLE_ITALIC = 2 };
@@ -14,6 +20,14 @@ enum { WORD_STYLE_BOLD = 0, WORD_STYLE_NORMAL = 1, WORD_STYLE_ITALIC = 2 };
 static GColor s_bg_color;
 static GColor s_text_color;
 static int s_word_style;
+
+static bool s_night_mode_enabled;
+static GColor s_night_bg_color;
+static GColor s_night_text_color;
+static int s_night_start_hour;
+static int s_night_start_minute;
+static int s_night_end_hour;
+static int s_night_end_minute;
 
 #ifdef CAPITAL
 #define HEIGHT_CORRECTION 0
@@ -29,6 +43,8 @@ static struct CommonWordsData {
   char buffer[FUZZY_TIME_BUFFER_SIZE];
 } s_data;
 
+static void apply_colors(void);
+
 static PropertyAnimation *slide_animation;
 static PropertyAnimation *slide_out_animation;
 static GRect frame;
@@ -42,6 +58,8 @@ static GFont s_current_font;
 static int s_current_font_tier;
 static GRect s_label_dest;
 static bool s_align_longest;
+static GColor s_active_bg_color;
+static GColor s_active_text_color;
 
 static GFont choose_font(const char *text, GSize *out_size, int *out_tier) {
   GRect narrow_box = GRect(0, 0, frame.size.w, 10000);
@@ -77,14 +95,31 @@ static GFont style_font_for_connector_word(GFont number_font, int tier) {
   }
 }
 
+// Recomputed once per apply_colors() call (minute tick / settings change /
+// init) rather than per redraw, since a redraw can happen many times during
+// a single 400ms slide animation and time()/localtime() isn't free.
+static void refresh_active_colors(void) {
+  bool night_active = false;
+  if (s_night_mode_enabled) {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) {
+      night_active = night_mode_is_active(t->tm_hour, t->tm_min,
+          s_night_start_hour, s_night_start_minute, s_night_end_hour, s_night_end_minute);
+    }
+  }
+  s_active_bg_color = night_active ? s_night_bg_color : s_bg_color;
+  s_active_text_color = night_active ? s_night_text_color : s_text_color;
+}
+
 // vor/nach/Uhr always occupy a whole line on their own (see
 // fuzzy_time_to_words), so per-word styling only needs per-line font choice,
 // not intra-line mixed-font drawing.
 static void draw_label_text(GContext *ctx, GRect bounds, const char *text,
                              GFont number_font, int tier, GTextAlignment alignment) {
-  graphics_context_set_fill_color(ctx, s_bg_color);
+  graphics_context_set_fill_color(ctx, s_active_bg_color);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
-  graphics_context_set_text_color(ctx, s_text_color);
+  graphics_context_set_text_color(ctx, s_active_text_color);
 
   int16_t y = 0;
   const char *p = text;
@@ -244,7 +279,22 @@ static void update_time(struct tm *t) {
 }
 
 static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
+  // Night mode's on/off window is time-based, not event-based, so re-apply
+  // colors every minute in case the day/night boundary was just crossed.
+  apply_colors();
   update_time(tick_time);
+}
+
+static void load_night_mode_window(int persist_key, int *out_hour, int *out_minute,
+                                    int default_hour, int default_minute) {
+  if (persist_exists(persist_key)) {
+    int packed = persist_read_int(persist_key);
+    *out_hour = packed / 60;
+    *out_minute = packed % 60;
+  } else {
+    *out_hour = default_hour;
+    *out_minute = default_minute;
+  }
 }
 
 static void load_colors(void) {
@@ -256,10 +306,20 @@ static void load_colors(void) {
       ? (bool)persist_read_int(PERSIST_KEY_ALIGN) : false;
   s_word_style = persist_exists(PERSIST_KEY_WORD_STYLE)
       ? persist_read_int(PERSIST_KEY_WORD_STYLE) : WORD_STYLE_BOLD;
+
+  s_night_mode_enabled = persist_exists(PERSIST_KEY_NIGHT_ENABLED)
+      ? (bool)persist_read_int(PERSIST_KEY_NIGHT_ENABLED) : false;
+  s_night_bg_color = persist_exists(PERSIST_KEY_NIGHT_BG_COLOR)
+      ? GColorFromHEX(persist_read_int(PERSIST_KEY_NIGHT_BG_COLOR)) : GColorBlack;
+  s_night_text_color = persist_exists(PERSIST_KEY_NIGHT_TEXT_COLOR)
+      ? GColorFromHEX(persist_read_int(PERSIST_KEY_NIGHT_TEXT_COLOR)) : GColorFromHEX(0x550000);
+  load_night_mode_window(PERSIST_KEY_NIGHT_START, &s_night_start_hour, &s_night_start_minute, 22, 0);
+  load_night_mode_window(PERSIST_KEY_NIGHT_END, &s_night_end_hour, &s_night_end_minute, 6, 0);
 }
 
 static void apply_colors(void) {
-  window_set_background_color(s_data.window, s_bg_color);
+  refresh_active_colors();
+  window_set_background_color(s_data.window, s_active_bg_color);
   layer_mark_dirty(s_data.label);
 }
 
@@ -269,11 +329,43 @@ static int word_style_from_string(const char *value) {
   return WORD_STYLE_BOLD;
 }
 
+// Clay's HTML time input delivers "HH:MM"; on parse failure the previous
+// setting is left untouched rather than falling back to a guessed default.
+// (No sscanf/stdio.h available in this SDK's libc, hence the manual parse.)
+static bool parse_time_string(const char *value, int *out_hour, int *out_minute) {
+  const char *colon = strchr(value, ':');
+  if (!colon || colon == value) return false;
+
+  int hour = 0;
+  for (const char *p = value; p < colon; p++) {
+    if (*p < '0' || *p > '9') return false;
+    hour = hour * 10 + (*p - '0');
+  }
+
+  int minute = 0;
+  const char *p = colon + 1;
+  if (*p == '\0') return false;
+  for (; *p; p++) {
+    if (*p < '0' || *p > '9') return false;
+    minute = minute * 10 + (*p - '0');
+  }
+
+  if (hour > 23 || minute > 59) return false;
+  *out_hour = hour;
+  *out_minute = minute;
+  return true;
+}
+
 static void inbox_received(DictionaryIterator *iter, void *context) {
-  Tuple *bg         = dict_find(iter, MESSAGE_KEY_backgroundColor);
-  Tuple *fg         = dict_find(iter, MESSAGE_KEY_textColor);
-  Tuple *align      = dict_find(iter, MESSAGE_KEY_blockAlign);
-  Tuple *word_style = dict_find(iter, MESSAGE_KEY_wordStyle);
+  Tuple *bg            = dict_find(iter, MESSAGE_KEY_backgroundColor);
+  Tuple *fg            = dict_find(iter, MESSAGE_KEY_textColor);
+  Tuple *align         = dict_find(iter, MESSAGE_KEY_blockAlign);
+  Tuple *word_style    = dict_find(iter, MESSAGE_KEY_wordStyle);
+  Tuple *night_enabled = dict_find(iter, MESSAGE_KEY_nightModeEnabled);
+  Tuple *night_bg      = dict_find(iter, MESSAGE_KEY_nightBackgroundColor);
+  Tuple *night_fg      = dict_find(iter, MESSAGE_KEY_nightTextColor);
+  Tuple *night_start   = dict_find(iter, MESSAGE_KEY_nightModeStart);
+  Tuple *night_end     = dict_find(iter, MESSAGE_KEY_nightModeEnd);
   if (bg) {
     persist_write_int(PERSIST_KEY_BG_COLOR, bg->value->uint32);
     s_bg_color = GColorFromHEX(bg->value->uint32);
@@ -281,6 +373,35 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
   if (fg) {
     persist_write_int(PERSIST_KEY_TEXT_COLOR, fg->value->uint32);
     s_text_color = GColorFromHEX(fg->value->uint32);
+  }
+  if (night_enabled) {
+    bool val = night_enabled->value->int8 != 0;
+    persist_write_int(PERSIST_KEY_NIGHT_ENABLED, val ? 1 : 0);
+    s_night_mode_enabled = val;
+  }
+  if (night_bg) {
+    persist_write_int(PERSIST_KEY_NIGHT_BG_COLOR, night_bg->value->uint32);
+    s_night_bg_color = GColorFromHEX(night_bg->value->uint32);
+  }
+  if (night_fg) {
+    persist_write_int(PERSIST_KEY_NIGHT_TEXT_COLOR, night_fg->value->uint32);
+    s_night_text_color = GColorFromHEX(night_fg->value->uint32);
+  }
+  if (night_start) {
+    int hour, minute;
+    if (parse_time_string(night_start->value->cstring, &hour, &minute)) {
+      s_night_start_hour = hour;
+      s_night_start_minute = minute;
+      persist_write_int(PERSIST_KEY_NIGHT_START, hour * 60 + minute);
+    }
+  }
+  if (night_end) {
+    int hour, minute;
+    if (parse_time_string(night_end->value->cstring, &hour, &minute)) {
+      s_night_end_hour = hour;
+      s_night_end_minute = minute;
+      persist_write_int(PERSIST_KEY_NIGHT_END, hour * 60 + minute);
+    }
   }
   apply_colors();
   if (word_style) {
@@ -338,7 +459,10 @@ static void do_init(void) {
   if (t) update_time(t);
 
   app_message_register_inbox_received(inbox_received);
-  app_message_open(64, 64);
+  // A full Clay "Save" now bundles 9 keys (colors, align, word style, and
+  // the 5 night-mode settings including two "HH:MM" strings), which no
+  // longer fits in the original 64-byte buffer.
+  app_message_open(256, 256);
   tick_timer_service_subscribe(MINUTE_UNIT, &handle_minute_tick);
   unobstructed_area_service_subscribe(
       (UnobstructedAreaHandlers){ .will_change = unobstructed_area_will_change },
