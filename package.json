@@ -46,6 +46,42 @@
           "name": "CaviarDreamsBold_52",
           "file": "fonts/CaviarDreamsBold_29.ttf",
           "characterRegex": "[A-Za-züö]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsRegular_29",
+          "file": "fonts/CaviarDreams_Regular.ttf",
+          "characterRegex": "[VvOoRrNnAaCcHhUu]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsRegular_38",
+          "file": "fonts/CaviarDreams_Regular.ttf",
+          "characterRegex": "[VvOoRrNnAaCcHhUu]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsRegular_52",
+          "file": "fonts/CaviarDreams_Regular.ttf",
+          "characterRegex": "[VvOoRrNnAaCcHhUu]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsItalic_29",
+          "file": "fonts/CaviarDreams_Italic.ttf",
+          "characterRegex": "[VvOoRrNnAaCcHhUu]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsItalic_38",
+          "file": "fonts/CaviarDreams_Italic.ttf",
+          "characterRegex": "[VvOoRrNnAaCcHhUu]"
+        },
+        {
+          "type": "font",
+          "name": "CaviarDreamsItalic_52",
+          "file": "fonts/CaviarDreams_Italic.ttf",
+          "characterRegex": "[VvOoRrNnAaCcHhUu]"
         }
       ]
     }
