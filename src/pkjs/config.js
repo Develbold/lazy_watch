@@ -38,15 +38,10 @@ module.exports = [
     "items": [
       { "type": "heading", "defaultValue": "Readability" },
       {
-        "type": "select",
+        "type": "toggle",
         "messageKey": "wordStyle",
-        "label": "\"vor\" / \"nach\" / \"Uhr\" style",
-        "defaultValue": "bold",
-        "options": [
-          { "label": "Bold", "value": "bold" },
-          { "label": "Normal", "value": "normal" },
-          { "label": "Italic", "value": "italic" }
-        ]
+        "label": "Italicize \"vor\" / \"nach\" / \"Uhr\"",
+        "defaultValue": false
       }
     ]
   },

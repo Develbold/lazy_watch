@@ -15,11 +15,10 @@
 #define PERSIST_KEY_NIGHT_END        9
 
 enum { FONT_TIER_LARGE = 0, FONT_TIER_MEDIUM = 1, FONT_TIER_SMALL = 2, FONT_TIER_COUNT = 3 };
-enum { WORD_STYLE_BOLD = 0, WORD_STYLE_NORMAL = 1, WORD_STYLE_ITALIC = 2 };
 
 static GColor s_bg_color;
 static GColor s_text_color;
-static int s_word_style;
+static bool s_word_style_bold_italic;
 
 static bool s_night_mode_enabled;
 static GColor s_night_bg_color;
@@ -51,8 +50,7 @@ static GRect frame;
 static GFont s_font_small;
 static GFont s_font_medium;
 static GFont s_font_large;
-static GFont s_font_regular[FONT_TIER_COUNT];
-static GFont s_font_italic[FONT_TIER_COUNT];
+static GFont s_font_bold_italic[FONT_TIER_COUNT];
 static Layer *root_layer;
 static GFont s_current_font;
 static int s_current_font_tier;
@@ -86,13 +84,9 @@ static GFont choose_font(const char *text, GSize *out_size, int *out_tier) {
 }
 
 // "vor"/"nach"/"Uhr" render in the number font (bold) unless the readability
-// setting picked a different style at the same size tier as the numbers.
+// setting turns on bold+italic, at the same size tier as the numbers.
 static GFont style_font_for_connector_word(GFont number_font, int tier) {
-  switch (s_word_style) {
-    case WORD_STYLE_NORMAL: return s_font_regular[tier];
-    case WORD_STYLE_ITALIC: return s_font_italic[tier];
-    default: return number_font;
-  }
+  return s_word_style_bold_italic ? s_font_bold_italic[tier] : number_font;
 }
 
 // Recomputed once per apply_colors() call (minute tick / settings change /
@@ -304,8 +298,8 @@ static void load_colors(void) {
       ? GColorFromHEX(persist_read_int(PERSIST_KEY_TEXT_COLOR)) : GColorWhite;
   s_align_longest = persist_exists(PERSIST_KEY_ALIGN)
       ? (bool)persist_read_int(PERSIST_KEY_ALIGN) : false;
-  s_word_style = persist_exists(PERSIST_KEY_WORD_STYLE)
-      ? persist_read_int(PERSIST_KEY_WORD_STYLE) : WORD_STYLE_BOLD;
+  s_word_style_bold_italic = persist_exists(PERSIST_KEY_WORD_STYLE)
+      ? (bool)persist_read_int(PERSIST_KEY_WORD_STYLE) : false;
 
   s_night_mode_enabled = persist_exists(PERSIST_KEY_NIGHT_ENABLED)
       ? (bool)persist_read_int(PERSIST_KEY_NIGHT_ENABLED) : false;
@@ -321,12 +315,6 @@ static void apply_colors(void) {
   refresh_active_colors();
   window_set_background_color(s_data.window, s_active_bg_color);
   layer_mark_dirty(s_data.label);
-}
-
-static int word_style_from_string(const char *value) {
-  if (strcmp(value, "normal") == 0) return WORD_STYLE_NORMAL;
-  if (strcmp(value, "italic") == 0) return WORD_STYLE_ITALIC;
-  return WORD_STYLE_BOLD;
 }
 
 // Clay's HTML time input delivers "HH:MM"; on parse failure the previous
@@ -405,8 +393,8 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
   }
   apply_colors();
   if (word_style) {
-    s_word_style = word_style_from_string(word_style->value->cstring);
-    persist_write_int(PERSIST_KEY_WORD_STYLE, s_word_style);
+    s_word_style_bold_italic = word_style->value->int8 != 0;
+    persist_write_int(PERSIST_KEY_WORD_STYLE, s_word_style_bold_italic ? 1 : 0);
     layer_mark_dirty(s_data.label);
   }
   if (align) {
@@ -434,13 +422,9 @@ static void do_init(void) {
   s_font_medium = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBold_38));
   s_font_large  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBold_52));
 
-  s_font_regular[FONT_TIER_LARGE]  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsRegular_52));
-  s_font_regular[FONT_TIER_MEDIUM] = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsRegular_38));
-  s_font_regular[FONT_TIER_SMALL]  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsRegular_29));
-
-  s_font_italic[FONT_TIER_LARGE]  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsItalic_52));
-  s_font_italic[FONT_TIER_MEDIUM] = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsItalic_38));
-  s_font_italic[FONT_TIER_SMALL]  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsItalic_29));
+  s_font_bold_italic[FONT_TIER_LARGE]  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBoldItalic_52));
+  s_font_bold_italic[FONT_TIER_MEDIUM] = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBoldItalic_38));
+  s_font_bold_italic[FONT_TIER_SMALL]  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBoldItalic_29));
 
   root_layer = window_get_root_layer(s_data.window);
   frame = layer_get_frame(root_layer);
@@ -477,8 +461,7 @@ static void do_deinit(void) {
   fonts_unload_custom_font(s_font_medium);
   fonts_unload_custom_font(s_font_large);
   for (int i = 0; i < FONT_TIER_COUNT; i++) {
-    fonts_unload_custom_font(s_font_regular[i]);
-    fonts_unload_custom_font(s_font_italic[i]);
+    fonts_unload_custom_font(s_font_bold_italic[i]);
   }
   window_destroy(s_data.window);
 }
