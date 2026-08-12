@@ -14,11 +14,9 @@
 #define PERSIST_KEY_NIGHT_START      8
 #define PERSIST_KEY_NIGHT_END        9
 
-enum { FONT_TIER_LARGE = 0, FONT_TIER_MEDIUM = 1, FONT_TIER_SMALL = 2, FONT_TIER_COUNT = 3 };
-
 static GColor s_bg_color;
 static GColor s_text_color;
-static bool s_word_style_bold_italic;
+static bool s_word_style_allcaps;
 
 static bool s_night_mode_enabled;
 static GColor s_night_bg_color;
@@ -50,22 +48,19 @@ static GRect frame;
 static GFont s_font_small;
 static GFont s_font_medium;
 static GFont s_font_large;
-static GFont s_font_bold_italic[FONT_TIER_COUNT];
 static Layer *root_layer;
 static GFont s_current_font;
-static int s_current_font_tier;
 static GRect s_label_dest;
 static bool s_align_longest;
 static GColor s_active_bg_color;
 static GColor s_active_text_color;
 
-static GFont choose_font(const char *text, GSize *out_size, int *out_tier) {
+static GFont choose_font(const char *text, GSize *out_size) {
   GRect narrow_box = GRect(0, 0, frame.size.w, 10000);
   GRect wide_box   = GRect(0, 0, 10000, 10000);
   int16_t max_h = frame.size.h - FONT_MARGIN;
 
   GFont candidates[2] = {s_font_large, s_font_medium};
-  int tiers[2] = {FONT_TIER_LARGE, FONT_TIER_MEDIUM};
   for (int i = 0; i < 2; i++) {
     GSize sz = graphics_text_layout_get_content_size(
         text, candidates[i], narrow_box, GTextOverflowModeWordWrap, GTextAlignmentCenter);
@@ -74,19 +69,11 @@ static GFont choose_font(const char *text, GSize *out_size, int *out_tier) {
         text, candidates[i], wide_box, GTextOverflowModeWordWrap, GTextAlignmentLeft);
     if (sz.h != wide.h) continue;
     *out_size = sz;
-    *out_tier = tiers[i];
     return candidates[i];
   }
   *out_size = graphics_text_layout_get_content_size(
       text, s_font_small, narrow_box, GTextOverflowModeWordWrap, GTextAlignmentCenter);
-  *out_tier = FONT_TIER_SMALL;
   return s_font_small;
-}
-
-// "vor"/"nach"/"Uhr" render in the number font (bold) unless the readability
-// setting turns on bold+italic, at the same size tier as the numbers.
-static GFont style_font_for_connector_word(GFont number_font, int tier) {
-  return s_word_style_bold_italic ? s_font_bold_italic[tier] : number_font;
 }
 
 // Recomputed once per apply_colors() call (minute tick / settings change /
@@ -107,10 +94,10 @@ static void refresh_active_colors(void) {
 }
 
 // vor/nach/Uhr always occupy a whole line on their own (see
-// fuzzy_time_to_words), so per-word styling only needs per-line font choice,
-// not intra-line mixed-font drawing.
+// fuzzy_time_to_words), so the readability setting only needs a per-line
+// text transform, not intra-line mixed-style drawing.
 static void draw_label_text(GContext *ctx, GRect bounds, const char *text,
-                             GFont number_font, int tier, GTextAlignment alignment) {
+                             GFont font, GTextAlignment alignment) {
   graphics_context_set_fill_color(ctx, s_active_bg_color);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
   graphics_context_set_text_color(ctx, s_active_text_color);
@@ -126,13 +113,20 @@ static void draw_label_text(GContext *ctx, GRect bounds, const char *text,
       strncpy(line, p, len);
       line[len] = '\0';
 
-      GFont line_font = fuzzy_time_is_connector_word(line)
-          ? style_font_for_connector_word(number_font, tier) : number_font;
+      if (s_word_style_allcaps && fuzzy_time_is_connector_word(line)) {
+        // Manual ASCII-only uppercase: these three words never contain
+        // umlauts, and this SDK's libc doesn't reliably have every usual
+        // function (no stdio.h, a broken strtok), so avoid depending on
+        // toupper() without having verified it first.
+        for (char *c = line; *c; c++) {
+          if (*c >= 'a' && *c <= 'z') *c -= 32;
+        }
+      }
       GRect measure_box = GRect(0, 0, bounds.size.w, 10000);
       GSize line_size = graphics_text_layout_get_content_size(
-          line, line_font, measure_box, GTextOverflowModeWordWrap, alignment);
+          line, font, measure_box, GTextOverflowModeWordWrap, alignment);
       GRect line_rect = GRect(0, y, bounds.size.w, line_size.h);
-      graphics_draw_text(ctx, line, line_font, line_rect,
+      graphics_draw_text(ctx, line, font, line_rect,
           GTextOverflowModeWordWrap, alignment, NULL);
       y += line_size.h;
     }
@@ -142,7 +136,7 @@ static void draw_label_text(GContext *ctx, GRect bounds, const char *text,
 }
 
 static void main_label_update_proc(Layer *layer, GContext *ctx) {
-  draw_label_text(ctx, layer_get_bounds(layer), s_data.buffer, s_current_font, s_current_font_tier,
+  draw_label_text(ctx, layer_get_bounds(layer), s_data.buffer, s_current_font,
       s_align_longest ? GTextAlignmentLeft : GTextAlignmentCenter);
 }
 
@@ -174,14 +168,13 @@ static GRect label_rect(const char *text, GFont font, int16_t y) {
 
 typedef struct {
   char text[FUZZY_TIME_BUFFER_SIZE];
-  GFont number_font;
-  int tier;
+  GFont font;
   GTextAlignment alignment;
 } SlideOutData;
 
 static void slide_out_update_proc(Layer *layer, GContext *ctx) {
   SlideOutData *d = layer_get_data(layer);
-  draw_label_text(ctx, layer_get_bounds(layer), d->text, d->number_font, d->tier, d->alignment);
+  draw_label_text(ctx, layer_get_bounds(layer), d->text, d->font, d->alignment);
 }
 
 static void old_label_anim_stopped(Animation *animation, bool finished, void *context) {
@@ -191,7 +184,7 @@ static void old_label_anim_stopped(Animation *animation, bool finished, void *co
   slide_out_animation = NULL;
 }
 
-static void slide_out_old(const char *old_text, GFont old_font, int old_tier, GRect old_rect) {
+static void slide_out_old(const char *old_text, GFont old_font, GRect old_rect) {
   if (slide_out_animation) {
     animation_unschedule((Animation *)slide_out_animation);
   }
@@ -199,8 +192,7 @@ static void slide_out_old(const char *old_text, GFont old_font, int old_tier, GR
   SlideOutData *d = layer_get_data(old_layer);
   strncpy(d->text, old_text, FUZZY_TIME_BUFFER_SIZE - 1);
   d->text[FUZZY_TIME_BUFFER_SIZE - 1] = '\0';
-  d->number_font = old_font;
-  d->tier = old_tier;
+  d->font = old_font;
   d->alignment = s_align_longest ? GTextAlignmentLeft : GTextAlignmentCenter;
   layer_set_update_proc(old_layer, slide_out_update_proc);
   layer_add_child(root_layer, old_layer);
@@ -228,21 +220,18 @@ static void update_time(struct tm *t) {
   bool has_old_text = s_data.buffer[0] != '\0';
   bool text_changed = !has_old_text || strcmp(s_data.buffer, new_text) != 0;
   GFont old_font = s_current_font;
-  int old_tier = s_current_font_tier;
   GRect old_rect = s_label_dest;
 
   if (has_old_text && text_changed) {
-    slide_out_old(s_data.buffer, old_font, old_tier, old_rect);
+    slide_out_old(s_data.buffer, old_font, old_rect);
   }
 
   memcpy(s_data.buffer, new_text, FUZZY_TIME_BUFFER_SIZE);
 
   GSize content_size;
-  int new_tier;
-  GFont new_font = choose_font(s_data.buffer, &content_size, &new_tier);
+  GFont new_font = choose_font(s_data.buffer, &content_size);
   int16_t y = (frame.size.h - content_size.h) / 2 - HEIGHT_CORRECTION;
   s_current_font = new_font;
-  s_current_font_tier = new_tier;
   layer_mark_dirty(s_data.label);
 
   GRect frame_to = label_rect(s_data.buffer, new_font, y);
@@ -298,7 +287,7 @@ static void load_colors(void) {
       ? GColorFromHEX(persist_read_int(PERSIST_KEY_TEXT_COLOR)) : GColorWhite;
   s_align_longest = persist_exists(PERSIST_KEY_ALIGN)
       ? (bool)persist_read_int(PERSIST_KEY_ALIGN) : false;
-  s_word_style_bold_italic = persist_exists(PERSIST_KEY_WORD_STYLE)
+  s_word_style_allcaps = persist_exists(PERSIST_KEY_WORD_STYLE)
       ? (bool)persist_read_int(PERSIST_KEY_WORD_STYLE) : false;
 
   s_night_mode_enabled = persist_exists(PERSIST_KEY_NIGHT_ENABLED)
@@ -393,8 +382,8 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
   }
   apply_colors();
   if (word_style) {
-    s_word_style_bold_italic = word_style->value->int8 != 0;
-    persist_write_int(PERSIST_KEY_WORD_STYLE, s_word_style_bold_italic ? 1 : 0);
+    s_word_style_allcaps = word_style->value->int8 != 0;
+    persist_write_int(PERSIST_KEY_WORD_STYLE, s_word_style_allcaps ? 1 : 0);
     layer_mark_dirty(s_data.label);
   }
   if (align) {
@@ -422,15 +411,10 @@ static void do_init(void) {
   s_font_medium = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBold_38));
   s_font_large  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBold_52));
 
-  s_font_bold_italic[FONT_TIER_LARGE]  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBoldItalic_52));
-  s_font_bold_italic[FONT_TIER_MEDIUM] = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBoldItalic_38));
-  s_font_bold_italic[FONT_TIER_SMALL]  = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_CaviarDreamsBoldItalic_29));
-
   root_layer = window_get_root_layer(s_data.window);
   frame = layer_get_frame(root_layer);
 
   s_current_font = s_font_small;
-  s_current_font_tier = FONT_TIER_SMALL;
   s_data.label = layer_create(GRect(0, 0, frame.size.w, frame.size.h));
   layer_set_update_proc(s_data.label, main_label_update_proc);
   layer_add_child(root_layer, s_data.label);
@@ -460,9 +444,6 @@ static void do_deinit(void) {
   fonts_unload_custom_font(s_font_small);
   fonts_unload_custom_font(s_font_medium);
   fonts_unload_custom_font(s_font_large);
-  for (int i = 0; i < FONT_TIER_COUNT; i++) {
-    fonts_unload_custom_font(s_font_bold_italic[i]);
-  }
   window_destroy(s_data.window);
 }
 

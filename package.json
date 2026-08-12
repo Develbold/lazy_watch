@@ -52,24 +52,6 @@
           "name": "CaviarDreamsBold_52",
           "file": "fonts/CaviarDreamsBold_29.ttf",
           "characterRegex": "[A-Za-züö]"
-        },
-        {
-          "type": "font",
-          "name": "CaviarDreamsBoldItalic_29",
-          "file": "fonts/CaviarDreams_BoldItalic.ttf",
-          "characterRegex": "[VvOoRrNnAaCcHhUu]"
-        },
-        {
-          "type": "font",
-          "name": "CaviarDreamsBoldItalic_38",
-          "file": "fonts/CaviarDreams_BoldItalic.ttf",
-          "characterRegex": "[VvOoRrNnAaCcHhUu]"
-        },
-        {
-          "type": "font",
-          "name": "CaviarDreamsBoldItalic_52",
-          "file": "fonts/CaviarDreams_BoldItalic.ttf",
-          "characterRegex": "[VvOoRrNnAaCcHhUu]"
         }
       ]
     }

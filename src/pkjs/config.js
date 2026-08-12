@@ -40,7 +40,7 @@ module.exports = [
       {
         "type": "toggle",
         "messageKey": "wordStyle",
-        "label": "Italicize \"vor\" / \"nach\" / \"Uhr\"",
+        "label": "ALL CAPS \"vor\" / \"nach\" / \"Uhr\"",
         "defaultValue": false
       }
     ]
