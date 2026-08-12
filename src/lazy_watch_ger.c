@@ -126,8 +126,7 @@ static void draw_label_text(GContext *ctx, GRect bounds, const char *text,
       strncpy(line, p, len);
       line[len] = '\0';
 
-      bool is_connector = fuzzy_time_is_connector_word(line);
-      GFont line_font = is_connector
+      GFont line_font = fuzzy_time_is_connector_word(line)
           ? style_font_for_connector_word(number_font, tier) : number_font;
       GRect measure_box = GRect(0, 0, bounds.size.w, 10000);
       GSize line_size = graphics_text_layout_get_content_size(
@@ -135,26 +134,6 @@ static void draw_label_text(GContext *ctx, GRect bounds, const char *text,
       GRect line_rect = GRect(0, y, bounds.size.w, line_size.h);
       graphics_draw_text(ctx, line, line_font, line_rect,
           GTextOverflowModeWordWrap, alignment, NULL);
-      if (is_connector && s_word_style_bold_italic) {
-        // The downloaded Bold Italic font measures ~30% less glyph ink than
-        // the real Bold weight, so it reads as italic-only next to the
-        // (genuinely bold) numbers. Stamping the same glyphs at surrounding
-        // 1px offsets ("poor man's bold") thickens the strokes without
-        // depending on a third-party file's actual weight. A single-axis
-        // offset measurably under-thickens (Pebble's antialiasing blends
-        // the overlap rather than adding a solid pixel), so stamp in all
-        // 4 directions. Shifting the whole rect (not just re-drawing at a
-        // different position) keeps this correct under both alignments,
-        // since graphics_draw_text positions text relative to the rect box.
-        const GPoint offsets[] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-        for (size_t i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++) {
-          GRect thicken_rect = line_rect;
-          thicken_rect.origin.x += offsets[i].x;
-          thicken_rect.origin.y += offsets[i].y;
-          graphics_draw_text(ctx, line, line_font, thicken_rect,
-              GTextOverflowModeWordWrap, alignment, NULL);
-        }
-      }
       y += line_size.h;
     }
     if (!nl) break;
