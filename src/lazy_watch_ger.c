@@ -113,15 +113,6 @@ static void draw_label_text(GContext *ctx, GRect bounds, const char *text,
       strncpy(line, p, len);
       line[len] = '\0';
 
-      if (s_word_style_allcaps && fuzzy_time_is_connector_word(line)) {
-        // Manual ASCII-only uppercase: these three words never contain
-        // umlauts, and this SDK's libc doesn't reliably have every usual
-        // function (no stdio.h, a broken strtok), so avoid depending on
-        // toupper() without having verified it first.
-        for (char *c = line; *c; c++) {
-          if (*c >= 'a' && *c <= 'z') *c -= 32;
-        }
-      }
       GRect measure_box = GRect(0, 0, bounds.size.w, 10000);
       GSize line_size = graphics_text_layout_get_content_size(
           line, font, measure_box, GTextOverflowModeWordWrap, alignment);
@@ -213,9 +204,42 @@ static void slide_anim_stopped(Animation *animation, bool finished, void *contex
   slide_animation = NULL;
 }
 
+// Applied once here, right after the words are generated, rather than at
+// draw time: choose_font() below needs to measure the text as it will
+// actually be drawn. Uppercased connector words are wider than mixed-case
+// ones, so sizing against the pre-transform text could pick a font the
+// real (uppercased) line no longer fits at, causing an unwanted mid-word
+// wrap - which is exactly what happened when this was a draw-time-only
+// transform in draw_label_text().
+static void apply_word_style_casing(char *text) {
+  if (!s_word_style_allcaps) return;
+  char *p = text;
+  while (*p) {
+    char *nl = strchr(p, '\n');
+    size_t len = nl ? (size_t)(nl - p) : strlen(p);
+    if (len > 0 && len < FUZZY_TIME_BUFFER_SIZE) {
+      char line[FUZZY_TIME_BUFFER_SIZE];
+      strncpy(line, p, len);
+      line[len] = '\0';
+      if (fuzzy_time_is_connector_word(line)) {
+        // Manual ASCII-only uppercase: these three words never contain
+        // umlauts, and this SDK's libc doesn't reliably have every usual
+        // function (no stdio.h, a broken strtok), so avoid depending on
+        // toupper() without having verified it first.
+        for (size_t i = 0; i < len; i++) {
+          if (p[i] >= 'a' && p[i] <= 'z') p[i] -= 32;
+        }
+      }
+    }
+    if (!nl) break;
+    p = nl + 1;
+  }
+}
+
 static void update_time(struct tm *t) {
   char new_text[FUZZY_TIME_BUFFER_SIZE];
   fuzzy_time_to_words(t->tm_hour, t->tm_min, new_text, FUZZY_TIME_BUFFER_SIZE);
+  apply_word_style_casing(new_text);
 
   bool has_old_text = s_data.buffer[0] != '\0';
   bool text_changed = !has_old_text || strcmp(s_data.buffer, new_text) != 0;
@@ -384,7 +408,11 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
   if (word_style) {
     s_word_style_allcaps = word_style->value->int8 != 0;
     persist_write_int(PERSIST_KEY_WORD_STYLE, s_word_style_allcaps ? 1 : 0);
-    layer_mark_dirty(s_data.label);
+    // Casing affects sizing (see apply_word_style_casing), so this needs a
+    // full recompute, not just a redraw - same as align below.
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) update_time(t);
   }
   if (align) {
     bool val = align->value->int8 != 0;
