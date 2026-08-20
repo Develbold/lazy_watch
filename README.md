@@ -27,8 +27,10 @@ Originally forked from [MegustaCode/lazy_watch](https://github.com/MegustaCode/l
   | 3:22 | `drei uhr zwei und zwanzig` |
 
 - **Adaptive font sizing**: automatically picks from three font sizes (small, medium, large) so the text always fills the screen as large as possible without overflow.
-- **Slide animation**: on every minute tick, the outgoing text slides left off-screen while the new text slides in from the right.
+- **Slide animation**: on every minute tick, the outgoing text slides left off-screen while the new text slides in from the right, playing exactly once per change.
 - **Configurable colors**: background and text color are independently configurable via the Pebble app. Settings persist across reboots.
+- **Readability styling**: the connector words "vor", "nach", and "Uhr" can optionally be shown in ALL CAPS, to make them easier to tell apart from the numbers.
+- **Night mode**: an independent background/text color scheme that switches on automatically during a configurable time window (e.g. 22:00–06:00), for a dimmer display at night.
 - **Timeline Quick View**: the layout adapts when Pebble's timeline peek overlays the watchface.
 
 ## Supported platforms

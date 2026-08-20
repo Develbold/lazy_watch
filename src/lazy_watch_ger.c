@@ -1,14 +1,30 @@
 #include "pebble.h"
 #include "num2words.h"
+#include "night_mode.h"
 
 #define FONT_MARGIN 20
 
-#define PERSIST_KEY_BG_COLOR   1
-#define PERSIST_KEY_TEXT_COLOR 2
-#define PERSIST_KEY_ALIGN      3
+#define PERSIST_KEY_BG_COLOR         1
+#define PERSIST_KEY_TEXT_COLOR       2
+#define PERSIST_KEY_ALIGN            3
+#define PERSIST_KEY_WORD_STYLE       4
+#define PERSIST_KEY_NIGHT_ENABLED    5
+#define PERSIST_KEY_NIGHT_BG_COLOR   6
+#define PERSIST_KEY_NIGHT_TEXT_COLOR 7
+#define PERSIST_KEY_NIGHT_START      8
+#define PERSIST_KEY_NIGHT_END        9
 
 static GColor s_bg_color;
 static GColor s_text_color;
+static bool s_word_style_allcaps;
+
+static bool s_night_mode_enabled;
+static GColor s_night_bg_color;
+static GColor s_night_text_color;
+static int s_night_start_hour;
+static int s_night_start_minute;
+static int s_night_end_hour;
+static int s_night_end_minute;
 
 #ifdef CAPITAL
 #define HEIGHT_CORRECTION 0
@@ -19,10 +35,12 @@ static GColor s_text_color;
 #endif
 
 static struct CommonWordsData {
-  TextLayer *label;
+  Layer *label;
   Window *window;
   char buffer[FUZZY_TIME_BUFFER_SIZE];
 } s_data;
+
+static void apply_colors(void);
 
 static PropertyAnimation *slide_animation;
 static PropertyAnimation *slide_out_animation;
@@ -34,6 +52,8 @@ static Layer *root_layer;
 static GFont s_current_font;
 static GRect s_label_dest;
 static bool s_align_longest;
+static GColor s_active_bg_color;
+static GColor s_active_text_color;
 
 static GFont choose_font(const char *text, GSize *out_size) {
   GRect narrow_box = GRect(0, 0, frame.size.w, 10000);
@@ -54,6 +74,61 @@ static GFont choose_font(const char *text, GSize *out_size) {
   *out_size = graphics_text_layout_get_content_size(
       text, s_font_small, narrow_box, GTextOverflowModeWordWrap, GTextAlignmentCenter);
   return s_font_small;
+}
+
+// Recomputed once per apply_colors() call (minute tick / settings change /
+// init) rather than per redraw, since a redraw can happen many times during
+// a single 400ms slide animation and time()/localtime() isn't free.
+static void refresh_active_colors(void) {
+  bool night_active = false;
+  if (s_night_mode_enabled) {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) {
+      night_active = night_mode_is_active(t->tm_hour, t->tm_min,
+          s_night_start_hour, s_night_start_minute, s_night_end_hour, s_night_end_minute);
+    }
+  }
+  s_active_bg_color = night_active ? s_night_bg_color : s_bg_color;
+  s_active_text_color = night_active ? s_night_text_color : s_text_color;
+}
+
+// vor/nach/Uhr always occupy a whole line on their own (see
+// fuzzy_time_to_words), so the readability setting only needs a per-line
+// text transform, not intra-line mixed-style drawing.
+static void draw_label_text(GContext *ctx, GRect bounds, const char *text,
+                             GFont font, GTextAlignment alignment) {
+  graphics_context_set_fill_color(ctx, s_active_bg_color);
+  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+  graphics_context_set_text_color(ctx, s_active_text_color);
+
+  int16_t y = 0;
+  const char *p = text;
+  while (true) {
+    const char *nl = strchr(p, '\n');
+    size_t len = nl ? (size_t)(nl - p) : strlen(p);
+    if (len > 0) {
+      char line[FUZZY_TIME_BUFFER_SIZE];
+      if (len >= FUZZY_TIME_BUFFER_SIZE) len = FUZZY_TIME_BUFFER_SIZE - 1;
+      strncpy(line, p, len);
+      line[len] = '\0';
+
+      GRect measure_box = GRect(0, 0, bounds.size.w, 10000);
+      GSize line_size = graphics_text_layout_get_content_size(
+          line, font, measure_box, GTextOverflowModeWordWrap, alignment);
+      GRect line_rect = GRect(0, y, bounds.size.w, line_size.h);
+      graphics_draw_text(ctx, line, font, line_rect,
+          GTextOverflowModeWordWrap, alignment, NULL);
+      y += line_size.h;
+    }
+    if (!nl) break;
+    p = nl + 1;
+  }
+}
+
+static void main_label_update_proc(Layer *layer, GContext *ctx) {
+  draw_label_text(ctx, layer_get_bounds(layer), s_data.buffer, s_current_font,
+      s_align_longest ? GTextAlignmentLeft : GTextAlignmentCenter);
 }
 
 static GRect label_rect(const char *text, GFont font, int16_t y) {
@@ -83,15 +158,20 @@ static GRect label_rect(const char *text, GFont font, int16_t y) {
 }
 
 typedef struct {
-  TextLayer *label;
   char text[FUZZY_TIME_BUFFER_SIZE];
-} SlideOutCtx;
+  GFont font;
+  GTextAlignment alignment;
+} SlideOutData;
+
+static void slide_out_update_proc(Layer *layer, GContext *ctx) {
+  SlideOutData *d = layer_get_data(layer);
+  draw_label_text(ctx, layer_get_bounds(layer), d->text, d->font, d->alignment);
+}
 
 static void old_label_anim_stopped(Animation *animation, bool finished, void *context) {
-  SlideOutCtx *ctx = (SlideOutCtx *)context;
-  layer_remove_from_parent(text_layer_get_layer(ctx->label));
-  text_layer_destroy(ctx->label);
-  free(ctx);
+  Layer *old_layer = (Layer *)context;
+  layer_remove_from_parent(old_layer);
+  layer_destroy(old_layer);
   slide_out_animation = NULL;
 }
 
@@ -99,28 +179,23 @@ static void slide_out_old(const char *old_text, GFont old_font, GRect old_rect) 
   if (slide_out_animation) {
     animation_unschedule((Animation *)slide_out_animation);
   }
-  SlideOutCtx *ctx = malloc(sizeof(SlideOutCtx));
-  if (!ctx) return;
-  strncpy(ctx->text, old_text, FUZZY_TIME_BUFFER_SIZE - 1);
-  ctx->text[FUZZY_TIME_BUFFER_SIZE - 1] = '\0';
-  ctx->label = text_layer_create(old_rect);
-  text_layer_set_background_color(ctx->label, s_bg_color);
-  text_layer_set_text_color(ctx->label, s_text_color);
-  text_layer_set_font(ctx->label, old_font);
-  text_layer_set_text_alignment(ctx->label,
-      s_align_longest ? GTextAlignmentLeft : GTextAlignmentCenter);
-  text_layer_set_text(ctx->label, ctx->text);
-  layer_add_child(root_layer, text_layer_get_layer(ctx->label));
+  Layer *old_layer = layer_create_with_data(old_rect, sizeof(SlideOutData));
+  SlideOutData *d = layer_get_data(old_layer);
+  strncpy(d->text, old_text, FUZZY_TIME_BUFFER_SIZE - 1);
+  d->text[FUZZY_TIME_BUFFER_SIZE - 1] = '\0';
+  d->font = old_font;
+  d->alignment = s_align_longest ? GTextAlignmentLeft : GTextAlignmentCenter;
+  layer_set_update_proc(old_layer, slide_out_update_proc);
+  layer_add_child(root_layer, old_layer);
 
   GRect frame_from = old_rect;
   GRect frame_to = GRect(-frame.size.w, old_rect.origin.y, old_rect.size.w, old_rect.size.h);
 
-  PropertyAnimation *anim = property_animation_create_layer_frame(
-      text_layer_get_layer(ctx->label), &frame_from, &frame_to);
+  PropertyAnimation *anim = property_animation_create_layer_frame(old_layer, &frame_from, &frame_to);
   animation_set_duration((Animation *)anim, 400);
   animation_set_curve((Animation *)anim, AnimationCurveEaseIn);
   animation_set_handlers((Animation *)anim,
-      (AnimationHandlers){ .stopped = old_label_anim_stopped }, ctx);
+      (AnimationHandlers){ .stopped = old_label_anim_stopped }, old_layer);
   animation_schedule((Animation *)anim);
   slide_out_animation = anim;
 }
@@ -129,37 +204,80 @@ static void slide_anim_stopped(Animation *animation, bool finished, void *contex
   slide_animation = NULL;
 }
 
+// Applied once here, right after the words are generated, rather than at
+// draw time: choose_font() below needs to measure the text as it will
+// actually be drawn. Uppercased connector words are wider than mixed-case
+// ones, so sizing against the pre-transform text could pick a font the
+// real (uppercased) line no longer fits at, causing an unwanted mid-word
+// wrap - which is exactly what happened when this was a draw-time-only
+// transform in draw_label_text().
+static void apply_word_style_casing(char *text) {
+  if (!s_word_style_allcaps) return;
+  char *p = text;
+  while (*p) {
+    char *nl = strchr(p, '\n');
+    size_t len = nl ? (size_t)(nl - p) : strlen(p);
+    if (len > 0 && len < FUZZY_TIME_BUFFER_SIZE) {
+      char line[FUZZY_TIME_BUFFER_SIZE];
+      strncpy(line, p, len);
+      line[len] = '\0';
+      if (fuzzy_time_is_connector_word(line)) {
+        // Manual ASCII-only uppercase: these three words never contain
+        // umlauts, and this SDK's libc doesn't reliably have every usual
+        // function (no stdio.h, a broken strtok), so avoid depending on
+        // toupper() without having verified it first.
+        for (size_t i = 0; i < len; i++) {
+          if (p[i] >= 'a' && p[i] <= 'z') p[i] -= 32;
+        }
+      }
+    }
+    if (!nl) break;
+    p = nl + 1;
+  }
+}
+
 static void update_time(struct tm *t) {
+  char new_text[FUZZY_TIME_BUFFER_SIZE];
+  fuzzy_time_to_words(t->tm_hour, t->tm_min, new_text, FUZZY_TIME_BUFFER_SIZE);
+  apply_word_style_casing(new_text);
+
   bool has_old_text = s_data.buffer[0] != '\0';
+  bool text_changed = !has_old_text || strcmp(s_data.buffer, new_text) != 0;
   GFont old_font = s_current_font;
   GRect old_rect = s_label_dest;
 
-  if (has_old_text) {
+  if (has_old_text && text_changed) {
     slide_out_old(s_data.buffer, old_font, old_rect);
   }
 
-  fuzzy_time_to_words(t->tm_hour, t->tm_min, s_data.buffer, FUZZY_TIME_BUFFER_SIZE);
+  memcpy(s_data.buffer, new_text, FUZZY_TIME_BUFFER_SIZE);
 
   GSize content_size;
   GFont new_font = choose_font(s_data.buffer, &content_size);
-  text_layer_set_font(s_data.label, new_font);
-  text_layer_set_text_alignment(s_data.label,
-      s_align_longest ? GTextAlignmentLeft : GTextAlignmentCenter);
-  text_layer_set_text(s_data.label, s_data.buffer);
   int16_t y = (frame.size.h - content_size.h) / 2 - HEIGHT_CORRECTION;
   s_current_font = new_font;
+  layer_mark_dirty(s_data.label);
 
   GRect frame_to = label_rect(s_data.buffer, new_font, y);
-  GRect frame_from = GRect(frame.size.w, y, frame_to.size.w, frame_to.size.h);
   s_label_dest = frame_to;
 
   if (slide_animation) {
     animation_unschedule((Animation *)slide_animation);
     slide_animation = NULL;
   }
-  layer_set_frame(text_layer_get_layer(s_data.label), frame_from);
+
+  if (!text_changed) {
+    // Reposition instantly (e.g. a reflow after obstruction/frame change) —
+    // nothing actually changed on screen, so replaying the slide would be a
+    // redundant duplicate transition.
+    layer_set_frame(s_data.label, frame_to);
+    return;
+  }
+
+  GRect frame_from = GRect(frame.size.w, y, frame_to.size.w, frame_to.size.h);
+  layer_set_frame(s_data.label, frame_from);
   slide_animation = property_animation_create_layer_frame(
-      text_layer_get_layer(s_data.label), &frame_from, &frame_to);
+      s_data.label, &frame_from, &frame_to);
   animation_set_duration((Animation *)slide_animation, 400);
   animation_set_curve((Animation *)slide_animation, AnimationCurveEaseIn);
   animation_set_handlers((Animation *)slide_animation,
@@ -168,7 +286,22 @@ static void update_time(struct tm *t) {
 }
 
 static void handle_minute_tick(struct tm *tick_time, TimeUnits units_changed) {
+  // Night mode's on/off window is time-based, not event-based, so re-apply
+  // colors every minute in case the day/night boundary was just crossed.
+  apply_colors();
   update_time(tick_time);
+}
+
+static void load_night_mode_window(int persist_key, int *out_hour, int *out_minute,
+                                    int default_hour, int default_minute) {
+  if (persist_exists(persist_key)) {
+    int packed = persist_read_int(persist_key);
+    *out_hour = packed / 60;
+    *out_minute = packed % 60;
+  } else {
+    *out_hour = default_hour;
+    *out_minute = default_minute;
+  }
 }
 
 static void load_colors(void) {
@@ -178,18 +311,62 @@ static void load_colors(void) {
       ? GColorFromHEX(persist_read_int(PERSIST_KEY_TEXT_COLOR)) : GColorWhite;
   s_align_longest = persist_exists(PERSIST_KEY_ALIGN)
       ? (bool)persist_read_int(PERSIST_KEY_ALIGN) : false;
+  s_word_style_allcaps = persist_exists(PERSIST_KEY_WORD_STYLE)
+      ? (bool)persist_read_int(PERSIST_KEY_WORD_STYLE) : false;
+
+  s_night_mode_enabled = persist_exists(PERSIST_KEY_NIGHT_ENABLED)
+      ? (bool)persist_read_int(PERSIST_KEY_NIGHT_ENABLED) : false;
+  s_night_bg_color = persist_exists(PERSIST_KEY_NIGHT_BG_COLOR)
+      ? GColorFromHEX(persist_read_int(PERSIST_KEY_NIGHT_BG_COLOR)) : GColorBlack;
+  s_night_text_color = persist_exists(PERSIST_KEY_NIGHT_TEXT_COLOR)
+      ? GColorFromHEX(persist_read_int(PERSIST_KEY_NIGHT_TEXT_COLOR)) : GColorFromHEX(0x550000);
+  load_night_mode_window(PERSIST_KEY_NIGHT_START, &s_night_start_hour, &s_night_start_minute, 22, 0);
+  load_night_mode_window(PERSIST_KEY_NIGHT_END, &s_night_end_hour, &s_night_end_minute, 6, 0);
 }
 
 static void apply_colors(void) {
-  window_set_background_color(s_data.window, s_bg_color);
-  text_layer_set_background_color(s_data.label, s_bg_color);
-  text_layer_set_text_color(s_data.label, s_text_color);
+  refresh_active_colors();
+  window_set_background_color(s_data.window, s_active_bg_color);
+  layer_mark_dirty(s_data.label);
+}
+
+// Clay's HTML time input delivers "HH:MM"; on parse failure the previous
+// setting is left untouched rather than falling back to a guessed default.
+// (No sscanf/stdio.h available in this SDK's libc, hence the manual parse.)
+static bool parse_time_string(const char *value, int *out_hour, int *out_minute) {
+  const char *colon = strchr(value, ':');
+  if (!colon || colon == value) return false;
+
+  int hour = 0;
+  for (const char *p = value; p < colon; p++) {
+    if (*p < '0' || *p > '9') return false;
+    hour = hour * 10 + (*p - '0');
+  }
+
+  int minute = 0;
+  const char *p = colon + 1;
+  if (*p == '\0') return false;
+  for (; *p; p++) {
+    if (*p < '0' || *p > '9') return false;
+    minute = minute * 10 + (*p - '0');
+  }
+
+  if (hour > 23 || minute > 59) return false;
+  *out_hour = hour;
+  *out_minute = minute;
+  return true;
 }
 
 static void inbox_received(DictionaryIterator *iter, void *context) {
-  Tuple *bg    = dict_find(iter, MESSAGE_KEY_backgroundColor);
-  Tuple *fg    = dict_find(iter, MESSAGE_KEY_textColor);
-  Tuple *align = dict_find(iter, MESSAGE_KEY_blockAlign);
+  Tuple *bg            = dict_find(iter, MESSAGE_KEY_backgroundColor);
+  Tuple *fg            = dict_find(iter, MESSAGE_KEY_textColor);
+  Tuple *align         = dict_find(iter, MESSAGE_KEY_blockAlign);
+  Tuple *word_style    = dict_find(iter, MESSAGE_KEY_wordStyle);
+  Tuple *night_enabled = dict_find(iter, MESSAGE_KEY_nightModeEnabled);
+  Tuple *night_bg      = dict_find(iter, MESSAGE_KEY_nightBackgroundColor);
+  Tuple *night_fg      = dict_find(iter, MESSAGE_KEY_nightTextColor);
+  Tuple *night_start   = dict_find(iter, MESSAGE_KEY_nightModeStart);
+  Tuple *night_end     = dict_find(iter, MESSAGE_KEY_nightModeEnd);
   if (bg) {
     persist_write_int(PERSIST_KEY_BG_COLOR, bg->value->uint32);
     s_bg_color = GColorFromHEX(bg->value->uint32);
@@ -198,7 +375,45 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
     persist_write_int(PERSIST_KEY_TEXT_COLOR, fg->value->uint32);
     s_text_color = GColorFromHEX(fg->value->uint32);
   }
+  if (night_enabled) {
+    bool val = night_enabled->value->int8 != 0;
+    persist_write_int(PERSIST_KEY_NIGHT_ENABLED, val ? 1 : 0);
+    s_night_mode_enabled = val;
+  }
+  if (night_bg) {
+    persist_write_int(PERSIST_KEY_NIGHT_BG_COLOR, night_bg->value->uint32);
+    s_night_bg_color = GColorFromHEX(night_bg->value->uint32);
+  }
+  if (night_fg) {
+    persist_write_int(PERSIST_KEY_NIGHT_TEXT_COLOR, night_fg->value->uint32);
+    s_night_text_color = GColorFromHEX(night_fg->value->uint32);
+  }
+  if (night_start) {
+    int hour, minute;
+    if (parse_time_string(night_start->value->cstring, &hour, &minute)) {
+      s_night_start_hour = hour;
+      s_night_start_minute = minute;
+      persist_write_int(PERSIST_KEY_NIGHT_START, hour * 60 + minute);
+    }
+  }
+  if (night_end) {
+    int hour, minute;
+    if (parse_time_string(night_end->value->cstring, &hour, &minute)) {
+      s_night_end_hour = hour;
+      s_night_end_minute = minute;
+      persist_write_int(PERSIST_KEY_NIGHT_END, hour * 60 + minute);
+    }
+  }
   apply_colors();
+  if (word_style) {
+    s_word_style_allcaps = word_style->value->int8 != 0;
+    persist_write_int(PERSIST_KEY_WORD_STYLE, s_word_style_allcaps ? 1 : 0);
+    // Casing affects sizing (see apply_word_style_casing), so this needs a
+    // full recompute, not just a redraw - same as align below.
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (t) update_time(t);
+  }
   if (align) {
     bool val = align->value->int8 != 0;
     persist_write_int(PERSIST_KEY_ALIGN, val ? 1 : 0);
@@ -227,10 +442,10 @@ static void do_init(void) {
   root_layer = window_get_root_layer(s_data.window);
   frame = layer_get_frame(root_layer);
 
-  s_data.label = text_layer_create(GRect(0, 0, frame.size.w, frame.size.h));
-  text_layer_set_font(s_data.label, s_font_small);
-  text_layer_set_text_alignment(s_data.label, GTextAlignmentCenter);
-  layer_add_child(root_layer, text_layer_get_layer(s_data.label));
+  s_current_font = s_font_small;
+  s_data.label = layer_create(GRect(0, 0, frame.size.w, frame.size.h));
+  layer_set_update_proc(s_data.label, main_label_update_proc);
+  layer_add_child(root_layer, s_data.label);
 
   load_colors();
   apply_colors();
@@ -240,7 +455,10 @@ static void do_init(void) {
   if (t) update_time(t);
 
   app_message_register_inbox_received(inbox_received);
-  app_message_open(64, 64);
+  // A full Clay "Save" now bundles 9 keys (colors, align, word style, and
+  // the 5 night-mode settings including two "HH:MM" strings), which no
+  // longer fits in the original 64-byte buffer.
+  app_message_open(256, 256);
   tick_timer_service_subscribe(MINUTE_UNIT, &handle_minute_tick);
   unobstructed_area_service_subscribe(
       (UnobstructedAreaHandlers){ .will_change = unobstructed_area_will_change },
@@ -250,7 +468,7 @@ static void do_init(void) {
 static void do_deinit(void) {
   unobstructed_area_service_unsubscribe();
   tick_timer_service_unsubscribe();
-  text_layer_destroy(s_data.label);
+  layer_destroy(s_data.label);
   fonts_unload_custom_font(s_font_small);
   fonts_unload_custom_font(s_font_medium);
   fonts_unload_custom_font(s_font_large);

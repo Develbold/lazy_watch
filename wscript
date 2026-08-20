@@ -27,7 +27,7 @@ def build(ctx):
         ctx.env = ctx.all_envs[platform]
         ctx.set_group(ctx.env.PLATFORM_NAME)
         app_elf = '{}/pebble-app.elf'.format(ctx.env.BUILD_DIR)
-        ctx.pbl_build(source=['src/lazy_watch_ger.c', 'src/num2words.c'],
+        ctx.pbl_build(source=['src/lazy_watch_ger.c', 'src/num2words.c', 'src/night_mode.c'],
                       target=app_elf,
                       bin_type='app')
         binaries.append({'platform': platform, 'app_elf': app_elf})

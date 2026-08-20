@@ -1,6 +1,7 @@
 #pragma once
 
 #include "string.h"
+#include <stdbool.h>
 /*
 typedef enum
 {
@@ -19,3 +20,7 @@ typedef enum
 #define FUZZY_TIME_BUFFER_SIZE 86
 
 void fuzzy_time_to_words(int hours, int minutes, char* words, size_t length);
+
+/* true if `line` is exactly one of the connector words ("vor"/"nach"/"uhr",
+ * cased per the CAPITAL/HALF_CAPITAL setting above) rather than a number */
+bool fuzzy_time_is_connector_word(const char* line);
